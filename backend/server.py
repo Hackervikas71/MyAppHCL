@@ -395,7 +395,16 @@ async def get_booking(booking_id: str, user: dict = Depends(get_current_user)):
     return booking_to_out(b)
 
 async def _tick_mechanic_location(b: dict) -> dict:
-    """Move mechanic slightly toward customer."""
+    """Move mechanic slightly toward customer — but only if we haven't received a real update recently."""
+    # If mechanic is pushing real location updates, skip the simulation
+    last_real = b.get("last_real_location_at")
+    if last_real:
+        try:
+            last_dt = datetime.fromisoformat(last_real)
+            if (datetime.now(timezone.utc) - last_dt).total_seconds() < 30:
+                return b
+        except Exception:
+            pass
     ml = b["mechanic_location"]
     tlat, tlng = b["lat"], b["lng"]
     # Move ~15% closer each poll
@@ -411,6 +420,29 @@ async def _tick_mechanic_location(b: dict) -> dict:
     b["eta_minutes"] = eta
     b["status"] = new_status
     return b
+
+@api.post("/bookings/{booking_id}/mechanic-location")
+async def push_mechanic_location(booking_id: str, loc: LocationUpdate, user: dict = Depends(require_role("mechanic"))):
+    b = await db.bookings.find_one({"id": booking_id})
+    if not b or b.get("mechanic_id") != user["id"]:
+        raise HTTPException(404, "Booking not found")
+    if b["status"] not in ("accepted", "arriving", "in_progress"):
+        return {"ok": True, "skipped": True}
+    dist = haversine_km(loc.lat, loc.lng, b["lat"], b["lng"])
+    eta = max(1, int(dist * 2.5))
+    new_status = b["status"]
+    if b["status"] == "accepted" and dist < 0.05:
+        new_status = "arriving"
+    upd = {
+        "mechanic_location": {"lat": loc.lat, "lng": loc.lng},
+        "eta_minutes": eta,
+        "status": new_status,
+        "last_real_location_at": now_iso(),
+    }
+    await db.bookings.update_one({"id": booking_id}, {"$set": upd})
+    # Also keep the mechanic's profile location fresh
+    await db.users.update_one({"id": user["id"]}, {"$set": {"location": {"lat": loc.lat, "lng": loc.lng, "updated_at": now_iso()}}})
+    return {"ok": True, "eta_minutes": eta, "status": new_status}
 
 @api.post("/bookings/{booking_id}/accept", response_model=BookingOut)
 async def accept_booking(booking_id: str, user: dict = Depends(require_role("mechanic"))):

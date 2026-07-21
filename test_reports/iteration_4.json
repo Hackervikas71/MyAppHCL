@@ -1,0 +1,35 @@
+{
+  "summary": "Iteration 4 — Feature A (breakdown photo on mechanic job) + Feature B (real mechanic-side live location) both PASS end-to-end. Backend: 12/12 new tests green in /app/backend/tests/test_iter4_photo_livelocation.py — covers photo_base64 persistence & GET readback, POST /api/bookings/{id}/mechanic-location happy path (2 sequential pushes reflected verbatim in booking.mechanic_location), simulation-suppression within 30s (poll after real push does NOT drift via _tick_mechanic_location), 404 for unassigned mechanic (mech2), 403 for customer token, within-50m auto-sets status='arriving', and {ok:true, skipped:true} when status is 'completed'. Frontend (mobile 390x844): logged in as mechanic1@hmc.app via /login (testIDs login-email-input/login-password-input/login-submit-button) → navigated to /(mechanic)/job/{bid} for a seeded booking with photo_base64 → breakdown-photo-thumb VISIBLE → tap opens modal with close-photo-modal → tap close dismisses modal. No-photo booking: breakdown-photo-thumb correctly ABSENT. Mechanic dashboard on web (perm=denied for geolocation in headless) shows the exact warning banner: 'Location off — enable GPS so customers can see you live.' Regression (from iter 1-3): all auth logins 200, booking accept/start/complete/rate still 200, Stripe pay-now flow untouched. Only carried-over cosmetics: shadow*/props.pointerEvents web deprecation warnings — unchanged, non-blocking.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "web preview (all screens)", "issues": ["Deprecation warnings persist: 'shadow*' style props deprecated (use boxShadow); props.pointerEvents deprecated (use style.pointerEvents). Cosmetic web-only, carried over from prior iterations."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter4_photo_livelocation.py",
+    "/app/test_reports/pytest/iter4_features.xml",
+    "/app/backend/tests/test_hmc_backend.py",
+    "/app/backend/tests/test_new_features.py"
+  ],
+  "action_items": [
+    "(Low, pre-existing) Migrate deprecated shadow*/props.pointerEvents style props to boxShadow/style.pointerEvents for cleaner web console.",
+    "(Optional) The 6s throttle in job/[id].tsx uses a ref-guard inside useEffect; consider moving to a setInterval so location keeps pushing even when loc lat/lng don't change between renders. Currently works because useLiveLocation re-emits, but a periodic push is more robust."
+  ],
+  "critical_code_review_comments": [
+    "server.py::push_mechanic_location correctly returns 404 (not 403) for unassigned mechanic per spec, and 403 for non-mechanic role via require_role — both verified.",
+    "_tick_mechanic_location correctly guards on last_real_location_at < 30s and returns early; verified via back-to-back GET after real push showing zero drift.",
+    "Within-50m auto-transition to 'arriving' works when initial status is 'accepted' (spec-compliant). When status is already 'arriving' or 'in_progress', we do NOT downgrade — correct.",
+    "job/[id].tsx correctly gates the photo row on booking.photo_base64 truthy check; Image + zoomable ScrollView with maximumZoomScale=3 satisfy the enlarged-image requirement.",
+    "dashboard.tsx correctly checks perm === 'denied' || 'blocked' to show the 'Location off' banner — confirmed rendering under Playwright's default (denied) geolocation."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (12/12 new + previous 33/33 still passing)", "frontend": "100% — all 3 Feature A cases + Feature B dashboard banner verified"},
+  "seed_data_creation": "Two ephemeral TEST bookings per Playwright run (one with photo, one without), both cancelled at end. Backend pytest creates one TEST booking that's driven through accept→start→complete lifecycle.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Features A & B are fully green. Photo modal uses ScrollView with maximumZoomScale=3 (pinch-zoom native only, taps to open/close work on web). The real-location push loop in job/[id].tsx is gated on perm==='granted', so on web headless it will NOT fire — this is expected; verified via direct API push instead. Simulation-suppression window is 30s; if a future test needs to see simulation drift, wait >30s after the last real push or use a booking that was accepted but never received a real-location push."
+}

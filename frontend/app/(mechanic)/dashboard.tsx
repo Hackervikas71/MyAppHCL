@@ -6,6 +6,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { colors, spacing, radius } from "@/src/lib/theme";
 import { api, loadUser, User, Booking, categoryLabel } from "@/src/lib/api";
+import { useLiveLocation } from "@/src/hooks/use-live-location";
 
 export default function MechanicDashboard() {
   const router = useRouter();
@@ -14,6 +15,7 @@ export default function MechanicDashboard() {
   const [loading, setLoading] = useState(false);
   const [online, setOnline] = useState(false);
   const [busy, setBusy] = useState(false);
+  const { perm } = useLiveLocation(true);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -67,6 +69,13 @@ export default function MechanicDashboard() {
           <View style={styles.warn}>
             <MaterialCommunityIcons name="alert" size={20} color={colors.warning} />
             <Text style={styles.warnText}>{`Account pending admin approval. You won't receive jobs yet.`}</Text>
+          </View>
+        )}
+
+        {(perm === "denied" || perm === "blocked") && (
+          <View style={styles.warn}>
+            <MaterialCommunityIcons name="map-marker-off" size={20} color={colors.warning} />
+            <Text style={styles.warnText}>Location off — enable GPS so customers can see you live.</Text>
           </View>
         )}
 

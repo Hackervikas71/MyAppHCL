@@ -115,6 +115,9 @@ export const api = {
   rateBooking: (id: string, rating: number, review: string) =>
     req<Booking>(`/bookings/${id}/rate`, { method: "POST", body: JSON.stringify({ rating, review }) }),
 
+  pushMechanicLocation: (booking_id: string, lat: number, lng: number) =>
+    req<{ ok: boolean; eta_minutes?: number; status?: string; skipped?: boolean }>(`/bookings/${booking_id}/mechanic-location`, { method: "POST", body: JSON.stringify({ lat, lng }) }),
+
   getMessages: (id: string) => req<any[]>(`/bookings/${id}/messages`),
   sendMessage: (id: string, text: string) => req<any>(`/bookings/${id}/messages`, { method: "POST", body: JSON.stringify({ text }) }),
 

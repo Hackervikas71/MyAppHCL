@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, TextInput, Modal, Alert } from "react-native";
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, TextInput, Modal, Alert, Image, ScrollView } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -7,6 +7,7 @@ import * as Haptics from "expo-haptics";
 import { colors, spacing, radius } from "@/src/lib/theme";
 import { api, Booking, categoryLabel } from "@/src/lib/api";
 import MapView from "@/src/components/MapView";
+import { useLiveLocation } from "@/src/hooks/use-live-location";
 
 export default function MechanicJob() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -15,13 +16,27 @@ export default function MechanicJob() {
   const [otp, setOtp] = useState("");
   const [otpOpen, setOtpOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [photoOpen, setPhotoOpen] = useState(false);
   const timer = useRef<any>(null);
+  const { loc, perm } = useLiveLocation(false); // don't double-sync profile; we push per-booking below
+  const lastPush = useRef<number>(0);
 
   const load = useCallback(async () => {
     try { setBooking(await api.getBooking(String(id))); } catch {}
   }, [id]);
 
   useEffect(() => { load(); timer.current = setInterval(load, 4000); return () => clearInterval(timer.current); }, [load]);
+
+  // Push mechanic's real GPS to the active booking every ~6s
+  useEffect(() => {
+    if (perm !== "granted") return;
+    if (!booking) return;
+    if (!["accepted", "arriving", "in_progress"].includes(booking.status)) return;
+    const now = Date.now();
+    if (now - lastPush.current < 6000) return;
+    lastPush.current = now;
+    api.pushMechanicLocation(String(id), loc.lat, loc.lng).catch(() => {});
+  }, [loc.lat, loc.lng, perm, booking?.status, id, booking]);
 
   async function start() {
     setBusy(true);
@@ -67,6 +82,17 @@ export default function MechanicJob() {
 
         {booking.description ? <Text style={styles.desc}>{`"${booking.description}"`}</Text> : null}
 
+        {booking.photo_base64 ? (
+          <Pressable onPress={() => setPhotoOpen(true)} style={styles.photoRow} testID="breakdown-photo-thumb">
+            <Image source={{ uri: booking.photo_base64 }} style={styles.photoThumb} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.photoLabel}>Customer Photo</Text>
+              <Text style={styles.photoHint}>Tap to enlarge</Text>
+            </View>
+            <MaterialCommunityIcons name="magnify-plus-outline" size={22} color={colors.brand} />
+          </Pressable>
+        ) : null}
+
         <View style={styles.grid}>
           <View style={styles.gc}><Text style={styles.gL}>Status</Text><Text style={styles.gV}>{booking.status.replace("_", " ")}</Text></View>
           <View style={styles.gc}><Text style={styles.gL}>ETA</Text><Text style={styles.gV}>{booking.eta_minutes ?? "--"} min</Text></View>
@@ -94,6 +120,19 @@ export default function MechanicJob() {
           {booking.status === "completed" && <View style={styles.done}><MaterialCommunityIcons name="check-decagram" size={22} color={colors.success} /><Text style={{ color: colors.success, fontWeight: "800" }}>Completed</Text></View>}
         </View>
       </View>
+
+      <Modal visible={photoOpen} transparent animationType="fade" onRequestClose={() => setPhotoOpen(false)}>
+        <View style={styles.photoOverlay}>
+          <Pressable style={styles.photoClose} onPress={() => setPhotoOpen(false)} testID="close-photo-modal">
+            <MaterialCommunityIcons name="close" size={26} color="#fff" />
+          </Pressable>
+          {booking.photo_base64 ? (
+            <ScrollView contentContainerStyle={{ flexGrow: 1, alignItems: "center", justifyContent: "center", padding: spacing.lg }} maximumZoomScale={3} minimumZoomScale={1}>
+              <Image source={{ uri: booking.photo_base64 }} style={styles.photoFull} resizeMode="contain" />
+            </ScrollView>
+          ) : null}
+        </View>
+      </Modal>
 
       <Modal visible={otpOpen} transparent animationType="slide">
         <View style={styles.overlay}>
@@ -137,6 +176,13 @@ const styles = StyleSheet.create({
   cSub: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
   price: { color: colors.brand, fontSize: 18, fontWeight: "900" },
   desc: { color: colors.textDim, fontStyle: "italic", fontSize: 13, marginTop: spacing.md, backgroundColor: colors.surface, padding: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border },
+  photoRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, marginTop: spacing.md, backgroundColor: colors.surface, padding: spacing.sm, borderRadius: radius.md, borderWidth: 1, borderColor: colors.brand },
+  photoThumb: { width: 64, height: 64, borderRadius: radius.sm, backgroundColor: colors.surface3 },
+  photoLabel: { color: colors.text, fontWeight: "800", fontSize: 13 },
+  photoHint: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
+  photoOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.95)" },
+  photoClose: { position: "absolute", top: 50, right: spacing.lg, width: 44, height: 44, borderRadius: 22, backgroundColor: "rgba(255,255,255,0.15)", alignItems: "center", justifyContent: "center", zIndex: 10 },
+  photoFull: { width: "100%", height: 500 },
   grid: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.md },
   gc: { flex: 1, backgroundColor: colors.surface, padding: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border },
   gL: { color: colors.textMuted, fontSize: 11, textTransform: "uppercase", fontWeight: "700" },
