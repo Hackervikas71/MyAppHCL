@@ -185,7 +185,7 @@ export default function Home() {
             )}
 
             {step === "confirm" && (
-              <View style={{ padding: spacing.lg, gap: spacing.md }}>
+              <ScrollView contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl }}>
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>Issue</Text>
                   <Text style={styles.summaryVal}>{BREAKDOWN_CATEGORIES.find(c => c.key === category)?.label}</Text>
@@ -211,7 +211,7 @@ export default function Home() {
                     </>
                   )}
                 </Pressable>
-              </View>
+              </ScrollView>
             )}
           </View>
         </View>
