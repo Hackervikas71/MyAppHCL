@@ -34,8 +34,8 @@ export default function Tracking() {
   }, [load]);
 
   useEffect(() => {
-    if (booking?.status === "completed" && !booking.rating) setRateOpen(true);
-  }, [booking?.status]);
+    if (booking?.status === "completed" && booking?.payment_status === "paid" && !booking.rating) setRateOpen(true);
+  }, [booking?.status, booking?.payment_status]);
 
   async function cancelBooking() {
     Alert.alert("Cancel booking?", "You'll lose your assigned mechanic.", [

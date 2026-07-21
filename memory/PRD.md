@@ -50,8 +50,9 @@ An Uber-like roadside assistance mobile app that connects stranded drivers with 
 
 ## Integrations
 - **Emergent LLM key** (OpenAI gpt-5.4-mini via `emergentintegrations`) for the AI assistant.
-- **Payments**: NOT integrated — flagged as "Cash only" for MVP per user choice.
-- **Real GPS**: NOT integrated — location defaults to Mumbai (19.076, 72.8777). Mechanic movement is SIMULATED on the backend (polling-based, moves 15% closer per read).
+- **Payments**: **Stripe test-mode** via `emergentintegrations.payments.stripe.checkout` — customer taps PAY on a completed booking → Stripe Checkout Session created → hosted checkout on web or `expo-web-browser` on native → success/cancel redirect to `/payment-success` or `/payment-cancel` → status polled and `booking.payment_status = "paid"` marked. Test card: `4242 4242 4242 4242`.
+- **Real GPS**: **`expo-location`** integrated — customer app requests foreground permission, watches position (25m / 8s), syncs to backend `POST /api/auth/location` every 10s. On web where permission is denied, a warning banner is shown and default Mumbai (19.076, 72.8777) is used. Mechanic movement toward customer remains simulated (backend polling-based).
+- **Camera / Photos**: **`expo-image-picker`** in booking flow — customer can take a photo or pick from library; base64 attached to booking payload. Permissions declared in `app.json` for iOS/Android.
 - **Push notifications**: NOT integrated (out of MVP scope).
 
 ## Tech
