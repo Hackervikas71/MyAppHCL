@@ -52,6 +52,25 @@ export default function Tracking() {
     await load();
   }
 
+  async function payNow() {
+    if (!booking) return;
+    setPaying(true);
+    try {
+      const origin = (typeof window !== "undefined" && (window as any).location?.origin)
+        || process.env.EXPO_PUBLIC_BACKEND_URL
+        || "https://mechanic-connect-116.preview.emergentagent.com";
+      const { url } = await api.createCheckout(booking.id, origin);
+      if (Platform.OS === "web") {
+        (window as any).location.href = url;
+      } else {
+        await WebBrowser.openBrowserAsync(url);
+        setTimeout(load, 1500);
+      }
+    } catch (e: any) {
+      Alert.alert("Payment error", e?.message || "Could not start checkout");
+    } finally { setPaying(false); }
+  }
+
   if (loading || !booking) {
     return <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>;
   }
