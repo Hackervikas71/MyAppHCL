@@ -20,6 +20,7 @@ import bcrypt
 import jwt as pyjwt
 
 from emergentintegrations.llm.chat import LlmChat, UserMessage, TextDelta, StreamDone
+from emergentintegrations.payments.stripe.checkout import StripeCheckout, CheckoutSessionRequest
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -28,6 +29,7 @@ MONGO_URL = os.environ['MONGO_URL']
 DB_NAME = os.environ['DB_NAME']
 JWT_SECRET = os.environ['JWT_SECRET']
 EMERGENT_LLM_KEY = os.environ['EMERGENT_LLM_KEY']
+STRIPE_API_KEY = os.environ['STRIPE_API_KEY']
 JWT_ALGO = "HS256"
 JWT_EXPIRE_DAYS = 30
 
@@ -118,6 +120,7 @@ class BookingOut(BaseModel):
     eta_minutes: Optional[int] = None
     rating: Optional[int] = None
     review: Optional[str] = None
+    payment_status: Optional[str] = None
 
 class ChatMessageIn(BaseModel):
     text: str
@@ -338,6 +341,7 @@ def booking_to_out(b: dict) -> BookingOut:
         eta_minutes=b.get("eta_minutes"),
         rating=b.get("rating"),
         review=b.get("review"),
+        payment_status=b.get("payment_status"),
     )
 
 @api.post("/bookings", response_model=BookingOut)
@@ -639,6 +643,73 @@ async def admin_approve(mech_id: str, user: dict = Depends(require_role("admin")
 async def admin_reject(mech_id: str, user: dict = Depends(require_role("admin"))):
     await db.users.update_one({"id": mech_id, "role": "mechanic"}, {"$set": {"is_verified": False}})
     return {"ok": True}
+
+# ============================================================================
+# PAYMENTS (Stripe test mode via Emergent proxy)
+# ============================================================================
+
+class CheckoutCreateIn(BaseModel):
+    booking_id: str
+    origin_url: str  # frontend base URL, e.g. https://mechanic-connect-116.preview.emergentagent.com
+
+_ALLOWED_AMOUNT_RANGE = (10.0, 100000.0)  # INR safety bounds
+
+@api.post("/payments/checkout/session")
+async def create_checkout(payload: CheckoutCreateIn, user: dict = Depends(require_role("customer"))):
+    booking = await db.bookings.find_one({"id": payload.booking_id, "customer_id": user["id"]})
+    if not booking:
+        raise HTTPException(404, "Booking not found")
+    if booking.get("payment_status") == "paid":
+        raise HTTPException(400, "Already paid")
+    amount = float(booking["price"])
+    if not (_ALLOWED_AMOUNT_RANGE[0] <= amount <= _ALLOWED_AMOUNT_RANGE[1]):
+        raise HTTPException(400, "Invalid amount")
+
+    origin = payload.origin_url.rstrip("/")
+    success_url = f"{origin}/payment-success?session_id={{CHECKOUT_SESSION_ID}}"
+    cancel_url = f"{origin}/payment-cancel"
+
+    checkout = StripeCheckout(api_key=STRIPE_API_KEY)
+    req = CheckoutSessionRequest(
+        amount=amount,
+        currency="inr",
+        success_url=success_url,
+        cancel_url=cancel_url,
+        metadata={"booking_id": payload.booking_id, "customer_id": user["id"]},
+    )
+    session = await checkout.create_checkout_session(req)
+    await db.payments.insert_one({
+        "id": str(uuid.uuid4()),
+        "booking_id": payload.booking_id,
+        "customer_id": user["id"],
+        "session_id": session.session_id,
+        "amount": amount,
+        "currency": "inr",
+        "status": "initiated",
+        "created_at": now_iso(),
+    })
+    return {"url": session.url, "session_id": session.session_id}
+
+@api.get("/payments/checkout/status/{session_id}")
+async def checkout_status(session_id: str, user: dict = Depends(get_current_user)):
+    payment = await db.payments.find_one({"session_id": session_id}, {"_id": 0})
+    if not payment:
+        raise HTTPException(404, "Session not found")
+    # If we've already marked paid, return immediately (idempotent)
+    checkout = StripeCheckout(api_key=STRIPE_API_KEY)
+    status = await checkout.get_checkout_status(session_id)
+    new_status = "paid" if status.payment_status == "paid" else status.status
+    if payment.get("status") != "paid" and status.payment_status == "paid":
+        await db.payments.update_one({"session_id": session_id}, {"$set": {"status": "paid", "paid_at": now_iso()}})
+        await db.bookings.update_one({"id": payment["booking_id"]}, {"$set": {"payment_status": "paid"}})
+    return {
+        "session_id": session_id,
+        "payment_status": status.payment_status,
+        "status": new_status,
+        "amount_total": status.amount_total,
+        "currency": status.currency,
+        "booking_id": payment["booking_id"],
+    }
 
 # ============================================================================
 # SEED DATA

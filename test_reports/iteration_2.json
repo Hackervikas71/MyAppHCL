@@ -1,0 +1,42 @@
+{
+  "summary": "Regression + new-feature test for HMC after 3 additions (expo-location, photo picker, Stripe payments). BACKEND: 33/33 pytest (24 regression + 9 new). Live location POST /api/auth/location persists lat/lng to user; Stripe POST /api/payments/checkout/session returns valid checkout.stripe.com URL + session_id; GET /api/payments/checkout/status/{sid} returns payment_status/status/amount_total/currency/booking_id for unpaid session; role check (mechanic 403), 404 for unknown booking/session all working. FRONTEND: Login → customer home renders with 'Location off — using default area' warning banner (web permission denied) and 5 mechanic cards via default Mumbai fallback. Booking modal 4-step flow verified: 12 breakdown categories → 6 vehicle options → PHOTO step with pick-camera-button + pick-library-button + photo-back-button + photo-continue-button (label 'SKIP' when no photo). BACK returns to vehicle step; SKIP advances to confirm; SUBMIT navigates to /booking/{id}. /payment-success renders testID + polls & shows 'Payment Not Confirmed' for invalid session (expected). /payment-cancel renders testID + 'Payment Cancelled'. CRITICAL BUG FOUND: on the tracking screen for a COMPLETED (unpaid) booking, a ReferenceError 'payNow is not defined' crashes the screen — the pay-now-button's onPress references a function that was never declared in booking/[id].tsx. This makes the Stripe pay button unusable via the UI (backend endpoints themselves work perfectly via curl).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Booking tracking screen (customer)", "issue": "ReferenceError: 'payNow is not defined' — line 168 of /app/frontend/app/(customer)/booking/[id].tsx uses onPress={payNow} on the pay-now-button, but the payNow function is never declared inside the Tracking component. When a booking is 'completed' and unpaid, the entire tracking screen red-screens (Uncaught Error at booking/[id].tsx:168). Backend Stripe endpoints work; only the client-side handler is missing. Reference: /app/frontend/app/(customer)/booking/[id].tsx:168", "testID": "pay-now-button", "priority": "CRITICAL"}
+    ],
+    "integration_issues": [
+      {"flow": "Customer → completed booking → pay via Stripe", "issue": "UI cannot initiate Stripe checkout because the tracking screen crashes before pay-now-button is tappable. Backend /api/payments/checkout/session verified working via curl and pytest (URL starts with https://checkout.stripe.com and session_id returned).", "affected_testIDs": ["pay-now-button", "payment-success"]}
+    ],
+    "design_issues": [
+      {"screen": "customer home", "issues": ["Console warnings still present: shadow* deprecated (use boxShadow) and props.pointerEvents deprecated (use style.pointerEvents) — cosmetic on web only, carried over from iteration 1."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_hmc_backend.py",
+    "/app/backend/tests/test_new_features.py",
+    "/app/test_reports/pytest/hmc_results.xml",
+    "/app/test_reports/pytest/new_features.xml"
+  ],
+  "action_items": [
+    "CRITICAL — Add the missing payNow async function inside the Tracking component in /app/frontend/app/(customer)/booking/[id].tsx. Suggested implementation: `async function payNow() { setPaying(true); try { const { url } = await api.checkoutSession(booking.id, window.location.origin); if (Platform.OS === 'web') { window.location.href = url; } else { await Linking.openURL(url); } } catch (e) { Alert.alert('Payment error', String(e)); } finally { setPaying(false); } }`. The imports (Alert, Linking, Platform, setPaying state, api) already exist in the file.",
+    "Ensure api.checkoutSession(bookingId, originUrl) and api.checkoutStatus(sessionId) exist in /app/frontend/src/lib/api (payment-success.tsx already calls api.checkoutStatus, so it should be wired).",
+    "(Low) Replace deprecated shadow*/props.pointerEvents with boxShadow/style.pointerEvents on home.tsx (carried from iteration 1)."
+  ],
+  "critical_code_review_comments": [
+    "The pay button was added and testID is correct, but the onPress handler function was never implemented — appears to be an incomplete commit. This should have failed lint/type-check; consider running `tsc --noEmit` in CI.",
+    "booking/[id].tsx has both `setPaying(true/false)` state hooks and `paying` variable used on disabled prop, indicating the handler was scaffolded but not written.",
+    "Backend server.py is now 799 lines (up from 730). Split into route modules (auth/bookings/payments/admin) recommended."
+  ],
+  "updated_files": ["/app/backend/tests/test_new_features.py (new)"],
+  "success_rate": {"backend": "100% (33/33: 24 regression + 9 new)", "frontend": "80% — home/permission banner/photo picker/booking submit/payment-success/payment-cancel screens all work; ONE critical bug on tracking screen for completed bookings blocks the pay-button flow."},
+  "seed_data_creation": "Two TEST bookings created + completed via mechanic1 to exercise Stripe endpoints. No user seed changes.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "After main agent adds the missing payNow() function in booking/[id].tsx, retest by (1) logging in as customer, (2) navigating to a completed booking (create+accept+start+complete via API if needed — see test_new_features.py::TestStripeCheckout::test_setup_completed_booking for pattern), (3) verifying pay-now-button is visible and tappable, (4) clicking it triggers POST /api/payments/checkout/session and either redirects browser to checkout.stripe.com (web) or opens external Linking (native). Do NOT complete an actual Stripe payment — end-to-end payment confirmation requires manual card entry with 4242 4242 4242 4242. Backend and payment-success polling logic are already verified working.",
+  "rca_of_issue": "Reproduction: (1) Login as customer@hmc.app. (2) Create + complete a booking (or use API to reach 'completed' status). (3) Navigate to /(customer)/booking/{id}. Expected: tracking screen shows 'Service Completed' with PAY button. Actual: red-screen error 'payNow is not defined' at booking/[id].tsx:168. Root cause: the JSX `<Pressable onPress={payNow} ...>` references identifier `payNow` that is never declared in the Tracking component scope; JS throws ReferenceError when React tries to evaluate the JSX props during render of the completed-booking branch. Mitigation: declare `async function payNow() {...}` (or `const payNow = async () => {...}`) inside the Tracking component that calls api.checkoutSession + opens the returned URL. The api client, state (paying, setPaying), Linking, and Platform are all already imported so only the function body is missing."
+}

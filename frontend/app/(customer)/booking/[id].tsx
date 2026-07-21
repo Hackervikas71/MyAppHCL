@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, ScrollView, Alert, TextInput, Modal } from "react-native";
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, ScrollView, Alert, TextInput, Modal, Image, Platform, Linking } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { colors, spacing, radius } from "@/src/lib/theme";
@@ -15,6 +16,7 @@ export default function Tracking() {
   const [rateOpen, setRateOpen] = useState(false);
   const [rating, setRating] = useState(5);
   const [review, setReview] = useState("");
+  const [paying, setPaying] = useState(false);
   const timer = useRef<any>(null);
 
   const load = useCallback(async () => {
@@ -157,6 +159,21 @@ export default function Tracking() {
                 <MaterialCommunityIcons name="check-decagram" size={28} color={colors.success} />
                 <Text style={styles.completeText}>Service Completed</Text>
                 <Text style={styles.completeSub}>Total: ₹{booking.price}</Text>
+                {booking.payment_status === "paid" ? (
+                  <View style={styles.paidBadge}>
+                    <MaterialCommunityIcons name="check-circle" size={16} color={colors.success} />
+                    <Text style={styles.paidText}>PAID</Text>
+                  </View>
+                ) : (
+                  <Pressable testID="pay-now-button" onPress={payNow} disabled={paying} style={styles.payBtn}>
+                    {paying ? <ActivityIndicator color="#fff" /> : (
+                      <>
+                        <MaterialCommunityIcons name="credit-card-outline" size={18} color="#fff" />
+                        <Text style={styles.payText}>PAY ₹{booking.price} · UPI / CARD</Text>
+                      </>
+                    )}
+                  </Pressable>
+                )}
               </View>
             )}
           </>
@@ -227,6 +244,10 @@ const styles = StyleSheet.create({
   completeBox: { alignItems: "center", padding: spacing.lg, gap: 4 },
   completeText: { color: colors.success, fontWeight: "800", fontSize: 15 },
   completeSub: { color: colors.textMuted, fontSize: 13 },
+  payBtn: { flexDirection: "row", gap: spacing.sm, backgroundColor: colors.brand, paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderRadius: radius.pill, alignItems: "center", marginTop: spacing.md },
+  payText: { color: "#fff", fontWeight: "900", fontSize: 13, letterSpacing: 1 },
+  paidBadge: { flexDirection: "row", alignItems: "center", gap: spacing.xs, backgroundColor: "rgba(52,199,89,0.15)", paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, marginTop: spacing.md, borderWidth: 1, borderColor: colors.success },
+  paidText: { color: colors.success, fontWeight: "900", letterSpacing: 1 },
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "center", padding: spacing.lg },
   modalCard: { backgroundColor: colors.surface2, borderRadius: radius.lg, padding: spacing.xl, alignItems: "center", borderWidth: 1, borderColor: colors.border },
   rateTitle: { color: colors.text, fontSize: 22, fontWeight: "900" },

@@ -46,6 +46,7 @@ export type Booking = {
   eta_minutes?: number | null;
   rating?: number | null;
   review?: string | null;
+  payment_status?: string | null;
 };
 
 export type Mechanic = {
@@ -120,6 +121,11 @@ export const api = {
   aiChat: (message: string, session_id?: string) => req<{ reply: string; session_id: string }>(`/ai/chat-sync`, { method: "POST", body: JSON.stringify({ message, session_id }) }),
 
   sos: (lat: number, lng: number, message?: string) => req<any>(`/sos`, { method: "POST", body: JSON.stringify({ lat, lng, message }) }),
+
+  createCheckout: (booking_id: string, origin_url: string) =>
+    req<{ url: string; session_id: string }>(`/payments/checkout/session`, { method: "POST", body: JSON.stringify({ booking_id, origin_url }) }),
+  checkoutStatus: (session_id: string) =>
+    req<{ payment_status: string; status: string; amount_total: number; currency: string; booking_id: string }>(`/payments/checkout/status/${session_id}`),
 
   adminStats: () => req<any>(`/admin/stats`),
   adminMechanics: () => req<User[]>(`/admin/mechanics`),

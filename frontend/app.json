@@ -1,16 +1,22 @@
 {
   "expo": {
-    "name": "frontend",
+    "name": "Highway Mechanic Connect",
     "slug": "frontend",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "frontend",
+    "scheme": "hmc",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.emergent.mechanicconnect.yvyoob"
+      "bundleIdentifier": "com.emergent.mechanicconnect.yvyoob",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Find nearby mechanics and share your location",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Share live location with your assigned mechanic",
+        "NSCameraUsageDescription": "Attach photos of the vehicle breakdown to your request",
+        "NSPhotoLibraryUsageDescription": "Attach existing breakdown photos from your library"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -18,7 +24,13 @@
         "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.emergent.mechanicconnect.yvyoob"
+      "package": "com.emergent.mechanicconnect.yvyoob",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -27,6 +39,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-web-browser",
       [
         "expo-splash-screen",
         {
@@ -34,6 +47,20 @@
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#000000"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Share live location with your assigned mechanic",
+          "locationWhenInUsePermission": "Find nearby mechanics and share your location"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Attach breakdown photos to your service request",
+          "cameraPermission": "Take a photo of the vehicle breakdown"
         }
       ]
     ],

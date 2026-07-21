@@ -1,25 +1,26 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator, TextInput, Modal } from "react-native";
+import { useCallback, useMemo, useState } from "react";
+import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator, TextInput, Modal, Image } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
+import * as ImagePicker from "expo-image-picker";
 import { colors, spacing, radius } from "@/src/lib/theme";
 import { api, BREAKDOWN_CATEGORIES, VEHICLE_TYPES, loadUser, Mechanic, User } from "@/src/lib/api";
 import MapView from "@/src/components/MapView";
-
-const DEFAULT_LOC = { lat: 19.076, lng: 72.8777 };
+import { useLiveLocation } from "@/src/hooks/use-live-location";
 
 export default function Home() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
-  const [loc, setLoc] = useState(DEFAULT_LOC);
+  const { loc, perm } = useLiveLocation(true);
   const [mechanics, setMechanics] = useState<Mechanic[]>([]);
   const [loading, setLoading] = useState(true);
   const [showBook, setShowBook] = useState(false);
-  const [step, setStep] = useState<"category" | "vehicle" | "confirm">("category");
+  const [step, setStep] = useState<"category" | "vehicle" | "photo" | "confirm">("category");
   const [category, setCategory] = useState<string | null>(null);
   const [vehicle, setVehicle] = useState<string | null>(null);
+  const [photo, setPhoto] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -27,13 +28,12 @@ export default function Home() {
     setLoading(true);
     const u = await loadUser();
     setUser(u);
-    if (u?.location) setLoc(u.location);
     try {
-      const { mechanics } = await api.nearbyMechanics(u?.location?.lat ?? DEFAULT_LOC.lat, u?.location?.lng ?? DEFAULT_LOC.lng, 20);
+      const { mechanics } = await api.nearbyMechanics(loc.lat, loc.lng, 20);
       setMechanics(mechanics);
     } catch {}
     setLoading(false);
-  }, []);
+  }, [loc.lat, loc.lng]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
@@ -44,8 +44,23 @@ export default function Home() {
 
   function openBooking() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setStep("category"); setCategory(null); setVehicle(null); setNote("");
+    setStep("category"); setCategory(null); setVehicle(null); setPhoto(null); setNote("");
     setShowBook(true);
+  }
+
+  async function pickPhoto(from: "camera" | "library") {
+    try {
+      let perm: any;
+      if (from === "camera") perm = await ImagePicker.requestCameraPermissionsAsync();
+      else perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) return;
+      const opts: ImagePicker.ImagePickerOptions = { mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.5, base64: true, allowsEditing: true, aspect: [4, 3] };
+      const res = from === "camera" ? await ImagePicker.launchCameraAsync(opts) : await ImagePicker.launchImageLibraryAsync(opts);
+      if (!res.canceled && res.assets?.[0]?.base64) {
+        setPhoto(`data:image/jpeg;base64,${res.assets[0].base64}`);
+        Haptics.selectionAsync();
+      }
+    } catch {}
   }
 
   async function submitBooking() {
@@ -54,19 +69,13 @@ export default function Home() {
     try {
       const b = await api.createBooking({
         breakdown_category: category, vehicle_type: vehicle, description: note,
+        photo_base64: photo,
         lat: loc.lat, lng: loc.lng, address: "Current location",
       });
-      // Auto-assign the closest mechanic for demo purposes
-      const nearest = mechanics[0];
-      if (nearest) {
-        try {
-          // login as that mechanic to accept - skipped, instead we simulate by polling backend
-        } catch {}
-      }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setShowBook(false);
       router.push(`/(customer)/booking/${b.id}`);
-    } catch (e) {
+    } catch {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally { setSubmitting(false); }
   }
@@ -89,6 +98,15 @@ export default function Home() {
           <Text style={styles.pillText}>₹{user?.wallet_balance?.toFixed(0) ?? 0}</Text>
         </View>
       </SafeAreaView>
+
+      {(perm === "denied" || perm === "blocked") && (
+        <SafeAreaView edges={["top"]} style={styles.permWrap} pointerEvents="box-none">
+          <View style={styles.permBanner}>
+            <MaterialCommunityIcons name="map-marker-off" size={16} color="#000" />
+            <Text style={styles.permText}>Location off — using default area. Enable in Settings for accurate matches.</Text>
+          </View>
+        </SafeAreaView>
+      )}
 
       {/* SOS floating button */}
       <Pressable
@@ -147,7 +165,7 @@ export default function Home() {
             <View style={styles.handle} />
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
-                {step === "category" ? "What's the issue?" : step === "vehicle" ? "Vehicle Type" : "Confirm Request"}
+                {step === "category" ? "What's the issue?" : step === "vehicle" ? "Vehicle Type" : step === "photo" ? "Add a Photo" : "Confirm Request"}
               </Text>
               <Pressable onPress={() => setShowBook(false)} testID="close-booking-modal"><MaterialCommunityIcons name="close" size={24} color={colors.textMuted} /></Pressable>
             </View>
@@ -174,13 +192,46 @@ export default function Home() {
                   <Pressable
                     key={v.key}
                     testID={`vehicle-${v.key}`}
-                    onPress={() => { Haptics.selectionAsync(); setVehicle(v.key); setStep("confirm"); }}
+                    onPress={() => { Haptics.selectionAsync(); setVehicle(v.key); setStep("photo"); }}
                     style={[styles.catCard, vehicle === v.key && styles.catCardActive]}
                   >
                     <MaterialCommunityIcons name={v.icon} size={32} color={vehicle === v.key ? "#fff" : colors.brand} />
                     <Text style={[styles.catLabel, vehicle === v.key && { color: "#fff" }]}>{v.label}</Text>
                   </Pressable>
                 ))}
+              </ScrollView>
+            )}
+
+            {step === "photo" && (
+              <ScrollView contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl }}>
+                <Text style={styles.photoHint}>Optional but recommended — helps mechanics diagnose faster and quote accurately.</Text>
+                {photo ? (
+                  <View style={styles.photoPreview}>
+                    <Image source={{ uri: photo }} style={styles.photoImg} />
+                    <Pressable onPress={() => setPhoto(null)} style={styles.photoRemove} testID="remove-photo-button">
+                      <MaterialCommunityIcons name="close" size={16} color="#fff" />
+                    </Pressable>
+                  </View>
+                ) : (
+                  <View style={styles.photoActions}>
+                    <Pressable testID="pick-camera-button" onPress={() => pickPhoto("camera")} style={styles.photoBtn}>
+                      <MaterialCommunityIcons name="camera" size={26} color={colors.brand} />
+                      <Text style={styles.photoBtnText}>Take Photo</Text>
+                    </Pressable>
+                    <Pressable testID="pick-library-button" onPress={() => pickPhoto("library")} style={styles.photoBtn}>
+                      <MaterialCommunityIcons name="image-multiple" size={26} color={colors.brand} />
+                      <Text style={styles.photoBtnText}>From Library</Text>
+                    </Pressable>
+                  </View>
+                )}
+                <View style={{ flexDirection: "row", gap: spacing.sm }}>
+                  <Pressable onPress={() => setStep("vehicle")} style={[styles.stepBtn, { backgroundColor: colors.surface }]} testID="photo-back-button">
+                    <Text style={{ color: colors.text, fontWeight: "700" }}>BACK</Text>
+                  </Pressable>
+                  <Pressable onPress={() => setStep("confirm")} style={[styles.stepBtn, { backgroundColor: colors.brand }]} testID="photo-continue-button">
+                    <Text style={{ color: "#fff", fontWeight: "900", letterSpacing: 1 }}>{photo ? "CONTINUE" : "SKIP"}</Text>
+                  </Pressable>
+                </View>
               </ScrollView>
             )}
 
@@ -224,6 +275,7 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface },
   mapWrap: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
   topOverlay: { position: "absolute", top: 0, left: 0, right: 0, paddingHorizontal: spacing.lg, flexDirection: "row", justifyContent: "space-between", gap: spacing.md },
+  permWrap: { position: "absolute", top: 60, left: 0, right: 0, paddingHorizontal: spacing.lg },
   pill: { flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: colors.surface2, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, marginTop: spacing.sm },
   pillText: { color: colors.text, fontWeight: "700", fontSize: 13 },
   sosBtn: { position: "absolute", right: spacing.lg, bottom: 320, width: 68, height: 68, borderRadius: 34, backgroundColor: colors.brand, alignItems: "center", justifyContent: "center", shadowColor: colors.brand, shadowOpacity: 0.6, shadowRadius: 14, shadowOffset: { width: 0, height: 4 }, elevation: 10, borderWidth: 3, borderColor: "#fff" },
@@ -260,4 +312,14 @@ const styles = StyleSheet.create({
   noteInput: { backgroundColor: colors.surface, color: colors.text, borderRadius: radius.md, padding: spacing.md, minHeight: 80, textAlignVertical: "top", borderWidth: 1, borderColor: colors.border, fontSize: 14 },
   confirmBtn: { flexDirection: "row", gap: spacing.sm, backgroundColor: colors.brand, paddingVertical: spacing.lg, borderRadius: radius.md, alignItems: "center", justifyContent: "center", marginBottom: spacing.xl },
   confirmText: { color: "#fff", fontWeight: "900", fontSize: 14, letterSpacing: 1 },
+  photoHint: { color: colors.textMuted, fontSize: 13, lineHeight: 18 },
+  photoActions: { flexDirection: "row", gap: spacing.md },
+  photoBtn: { flex: 1, backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.lg, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border, gap: spacing.sm, minHeight: 120 },
+  photoBtnText: { color: colors.textDim, fontWeight: "700", fontSize: 13 },
+  photoPreview: { borderRadius: radius.md, overflow: "hidden", borderWidth: 1, borderColor: colors.border, position: "relative" },
+  photoImg: { width: "100%", height: 200 },
+  photoRemove: { position: "absolute", top: spacing.sm, right: spacing.sm, width: 30, height: 30, borderRadius: 15, backgroundColor: colors.brand, alignItems: "center", justifyContent: "center" },
+  stepBtn: { flex: 1, paddingVertical: spacing.md, borderRadius: radius.md, alignItems: "center" },
+  permBanner: { flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: colors.warning, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.md, marginTop: spacing.sm },
+  permText: { color: "#000", fontSize: 11, fontWeight: "700", flex: 1 },
 });
