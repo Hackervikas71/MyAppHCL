@@ -51,8 +51,12 @@ An Uber-like roadside assistance mobile app that connects stranded drivers with 
 ## Integrations
 - **Emergent LLM key** (OpenAI gpt-5.4-mini via `emergentintegrations`) for the AI assistant.
 - **Payments**: **Stripe test-mode** via `emergentintegrations.payments.stripe.checkout` — customer taps PAY on a completed booking → Stripe Checkout Session created → hosted checkout on web or `expo-web-browser` on native → success/cancel redirect to `/payment-success` or `/payment-cancel` → status polled and `booking.payment_status = "paid"` marked. Test card: `4242 4242 4242 4242`.
-- **Real GPS**: **`expo-location`** integrated — customer app requests foreground permission, watches position (25m / 8s), syncs to backend `POST /api/auth/location` every 10s. On web where permission is denied, a warning banner is shown and default Mumbai (19.076, 72.8777) is used. Mechanic movement toward customer remains simulated (backend polling-based).
-- **Camera / Photos**: **`expo-image-picker`** in booking flow — customer can take a photo or pick from library; base64 attached to booking payload. Permissions declared in `app.json` for iOS/Android.
+- **Real GPS**: **`expo-location`** integrated on BOTH customer and mechanic apps.
+  - Customer app: watches position, syncs to `POST /api/auth/location` every 10s.
+  - Mechanic dashboard: also uses `useLiveLocation` so their profile location stays fresh (drives "nearby mechanic" matching for customers).
+  - Mechanic job screen: pushes real coords to `POST /api/bookings/{id}/mechanic-location` every ~6s while a job is active. Backend suppresses the polling-simulation for 30s after each real push, so customer tracking now reflects the mechanic's actual GPS instead of a linear interpolation.
+  - Both apps show a yellow "Location off" banner on web / when permission denied and gracefully fall back.
+- **Breakdown photo end-to-end**: customer attaches via `expo-image-picker` (camera or library) → stored on the booking as base64 → mechanic sees a thumbnail row on the job screen with tap-to-enlarge full-screen zoomable modal.
 - **Push notifications**: NOT integrated (out of MVP scope).
 
 ## Tech
