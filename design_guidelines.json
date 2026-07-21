@@ -1,0 +1,158 @@
+{
+  "app_name": "Highway Mechanic Connect (HMC)",
+  "personality": "7 Dark-First Utility DARK",
+  "personality_one_liner": "A high-contrast, tactical command-center interface built for urgency, clear live tracking, and fast response.",
+  "color": {
+    "surface": "#121212",
+    "onSurface": "#F5F5F5",
+    "surfaceSecondary": "#1E1E1E",
+    "onSurfaceSecondary": "#E0E0E0",
+    "surfaceTertiary": "#2C2C2E",
+    "onSurfaceTertiary": "#98989D",
+    "surfaceInverse": "#F5F5F5",
+    "onSurfaceInverse": "#121212",
+    "brand": "#FF3B30",
+    "brandPrimary": "#FF3B30",
+    "onBrandPrimary": "#FFFFFF",
+    "brandSecondary": "#FF6961",
+    "onBrandSecondary": "#121212",
+    "brandTertiary": "#4A110D",
+    "onBrandTertiary": "#FF6961",
+    "success": "#34C759",
+    "onSuccess": "#000000",
+    "warning": "#FFCC00",
+    "onWarning": "#000000",
+    "error": "#FF3B30",
+    "onError": "#FFFFFF",
+    "info": "#8E8E93",
+    "onInfo": "#FFFFFF",
+    "border": "#2C2C2E",
+    "borderStrong": "#3A3A3C",
+    "divider": "#2C2C2E"
+  },
+  "typography": {
+    "displayFontFamily": "Rajdhani",
+    "textFontFamily": "DM Sans",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24
+    }
+  },
+  "spacing": {
+    "rule": "Generous spacing around core emergency actions to prevent mis-taps. Tight, grouped spacing for metadata and metrics.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 6,
+    "md": 12,
+    "lg": 20,
+    "pill": 999
+  },
+  "shadow_tier": "0",
+  "navigation": "bottom_tabs",
+  "icon_set": "Phosphor",
+  "glassmorphism": {
+    "enabled": "false",
+    "do's": [
+      "Use solid surfaceSecondary with correct elevation for better readability in high-stress/low-light environments."
+    ],
+    "dont's": [
+      "Avoid blur on map overlays, use solid high-contrast surfaces instead.",
+      "No frosted glass for critical emergency CTAs."
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Customer Home",
+      "purpose": "Interactive map with nearby mechanics and immediate breakdown request access.",
+      "states": {
+        "loading": "Map skeleton with centered signal red spinner.",
+        "empty": "N/A - map always displays location.",
+        "error": "Full screen error overlay 'Unable to fetch location' with retry button."
+      },
+      "layout": "Full-bleed Map view. A floating profile/wallet pill at the top left. A massive, high-contrast, circular 'SOS' button floating bottom right. A Bottom Sheet docked at the bottom containing the 'Request Assistance' entry point and breakdown categories grid. The bottom sheet header uses a solid surfaceSecondary with a drag handle."
+    },
+    {
+      "name": "Booking Flow (Bottom Sheet)",
+      "purpose": "Step-by-step minimal input flow to request a mechanic.",
+      "states": {
+        "loading": "Skeleton grid for categories.",
+        "empty": "No mechanics available in the area message.",
+        "error": "Network error, retry button."
+      },
+      "layout": "Step 1: Grid of breakdown categories (Flat Tyre, Battery, Tow, etc.) using brandTertiary tinted containers. Step 2: Vehicle Type selection row. Step 3: Photo upload and voice note UI. A sticky primary CTA 'Find Mechanic' pinned to the bottom."
+    },
+    {
+      "name": "Live Tracking",
+      "purpose": "Real-time map tracking of the assigned mechanic and ETA.",
+      "states": {
+        "loading": "Centered spinner over map.",
+        "empty": "N/A",
+        "error": "Loss of signal warning overlay."
+      },
+      "layout": "Full-bleed map showing customer and moving mechanic markers. A stacked bottom module (solid surfaceSecondary) displaying mechanic details, ETA in large display typography (Rajdhani), and action buttons (Chat, Call, Cancel)."
+    },
+    {
+      "name": "Mechanic Dashboard",
+      "purpose": "Command center for the mechanic to view incoming requests, earnings, and active status.",
+      "states": {
+        "loading": "Skeleton metrics cards.",
+        "empty": "Illustration: No active jobs right now.",
+        "error": "Error loading dashboard."
+      },
+      "layout": "Top section: High-contrast Online/Offline toggle. Middle: Large segmented metric cards (Earnings, Jobs Completed) using display fonts. Bottom: List of incoming/active job cards with prominent 'Accept' primary buttons and 'Decline' secondary buttons."
+    }
+  ],
+  "images": {
+    "hero_breakdown": {
+      "url": "https://images.pexels.com/photos/5403208/pexels-photo-5403208.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "alt": "Emergency warning triangle by a car at night"
+    },
+    "map_night_mode": {
+      "url": "https://images.pexels.com/photos/9966011/pexels-photo-9966011.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "alt": "GPS navigation interface illuminated at night"
+    },
+    "mechanic_avatar": {
+      "url": "https://images.unsplash.com/photo-1778131852103-e4e03db1c3e6?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NTJ8MHwxfHNlYXJjaHwxfHx0b3clMjB0cnVjayUyMGxvZ28lMjB0cmFuc3BhcmVudCUyMHBuZ3xlbnwwfHx8fDE3ODM5MDg5OTJ8MA&ixlib=rb-4.1.0&q=85",
+      "alt": "Tow mater sign with people below"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Follow the 'Dark-First Utility DARK' personality strictly. Do not use pure black backgrounds; use the provided #121212 and #1E1E1E.",
+    "Do NOT use any blue, purple, or indigo colors across the application, as per the strict prohibition. The primary action color is Signal Red (#FF3B30).",
+    "Use Phosphor icons with consistent weights across all screens.",
+    "Implement real-time map styling in dark mode.",
+    "The Customer Home should focus on the map and a persistent Bottom Sheet for the request flow. Ensure the SOS button is heavily emphasized and floating above the sheet.",
+    "For the Mechanic Dashboard, emphasize large typography (Rajdhani) for metrics and clear active/inactive state visual differences.",
+    "Ensure the booking flow involves minimal steps: category selection -> vehicle type -> request.",
+    "Haptics MUST be wired to every primary button tap, toggle change, and category selection."
+  ],
+  "haptics": {
+    "primary_button_press": "impactMedium",
+    "category_select": "impactLight",
+    "online_offline_toggle": "impactHeavy",
+    "sos_button_press": "notificationWarning",
+    "tab_change": "selection"
+  }
+}
