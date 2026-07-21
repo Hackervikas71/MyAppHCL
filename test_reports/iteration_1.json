@@ -1,0 +1,36 @@
+{
+  "summary": "Full test of HMC roadside assistance app. Backend: 24/24 pytest cases passed covering auth (login/register/me for all 3 roles + duplicate/invalid checks), mechanics/nearby (5 seeded), full booking lifecycle (create→accept→start→OTP validation→complete→rate), AI chat-sync (Emergent LLM/GPT), SOS with helplines, admin stats & mechanic list & approve, and RBAC (403 for customer on admin route). Frontend: Login screen loads with prefilled demo customer creds, sign-in navigates to customer home; map + 5 mechanic cards + SOS + REQUEST all render; AI Help tab returns a full multi-paragraph AI response for 'battery seems dead'; booking flow (REQUEST → flat_tyre → car → confirm → submit) creates a booking and navigates to /booking/{id} tracking screen showing 'Finding a mechanic near you...'; SOS screen opens; mechanic login shows dashboard with Earnings/Jobs/Rating metrics, ONLINE toggle, and incoming Flat Tyre request with ACCEPT button; admin login shows Command Center stats and mechanics list with APPROVED/SUSPEND controls. All high-priority flows work.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "BookingModal submit button", "issue": "The 'FIND MECHANIC NOW' submit button (testID=submit-booking-button) sits below the mobile viewport when the confirm step is open on 390x844; Playwright reports 'Element is outside of the viewport' even after scrollIntoView. Functionally works via JS click but a real user might need to scroll the modal. Consider making the modal ScrollView (currently plain View for confirm step) or reducing top padding. Reference: /app/frontend/app/(customer)/home.tsx:187-215", "testID": "submit-booking-button", "priority": "LOW"},
+      {"component": "Mechanic dashboard Accept button", "issue": "The ACCEPT button on incoming request cards lacks an accept-specific testID prefix (e.g., accept-booking-{id}); works via text but harder to target in automated tests. Reference: /app/frontend/app/(mechanic)/dashboard.tsx", "testID": "N/A (missing)", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "customer home", "issues": ["Console deprecation warning: 'shadow*' style props deprecated on web — use 'boxShadow' (e.g., sosBtn shadow props in home.tsx:229). Cosmetic on web only.", "Console deprecation warning: props.pointerEvents deprecated — use style.pointerEvents (home.tsx:82)."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_hmc_backend.py", "/app/test_reports/pytest/hmc_results.xml"],
+  "action_items": [
+    "(Optional/Low) Make the booking-confirm view scrollable (wrap in ScrollView) so the submit button is reachable without JS/keyboard on shorter mobile viewports.",
+    "(Optional/Low) Add testID='accept-booking-{booking_id}' to mechanic dashboard ACCEPT button for reliable automated testing.",
+    "(Optional/Low) Replace deprecated 'shadow*' style props with 'boxShadow' and 'props.pointerEvents' with 'style.pointerEvents' to silence RN-Web warnings."
+  ],
+  "critical_code_review_comments": [
+    "server.py is ~730 lines — still manageable but nearing the 700-line split threshold; consider splitting routes into modules (auth/bookings/admin/ai) as features grow.",
+    "GET /api/bookings/{id} mutates DB (mechanic location tick) on every poll (side-effect on GET). Works as documented (SIMULATED tracking) but is not idempotent; acceptable for demo.",
+    "Complete endpoint returns 400 'Invalid OTP' — good validation; wallet credit uses $inc which is atomic — good."
+  ],
+  "updated_files": ["/app/backend/tests/test_hmc_backend.py (new)"],
+  "success_rate": {"backend": "100% (24/24)", "frontend": "100% of high-priority flows verified"},
+  "seed_data_creation": "Tests created TEST_-prefixed users (TEST_cust_*, TEST_mech_*) via /api/auth/register; no other seed changes. Backend auto-seeds admin/customer/5 mechanics on startup.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend base URL: https://mechanic-connect-116.preview.emergentagent.com/api. Run `pytest /app/backend/tests/test_hmc_backend.py -v`. All flows work; only minor cosmetic/UI improvements noted. AI chat-sync takes ~10-15s to return. Booking modal submit button is below viewport on 390x844 — use JS click or scroll if automating.",
+  "rca_of_issue": "N/A — no bugs found."
+}
