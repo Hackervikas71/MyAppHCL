@@ -146,6 +146,29 @@ class SOSIn(BaseModel):
     lng: float
     message: Optional[str] = "Emergency SOS"
 
+class NotificationOut(BaseModel):
+    id: str
+    user_id: str
+    type: str
+    title: str
+    body: str
+    booking_id: Optional[str] = None
+    read: bool = False
+    created_at: str
+
+async def _emit_notification(user_id: str, ntype: str, title: str, body: str, booking_id: Optional[str] = None):
+    doc = {
+        "id": str(uuid.uuid4()),
+        "user_id": user_id,
+        "type": ntype,
+        "title": title,
+        "body": body,
+        "booking_id": booking_id,
+        "read": False,
+        "created_at": now_iso(),
+    }
+    await db.notifications.insert_one(doc)
+
 # ============================================================================
 # AUTH HELPERS
 # ============================================================================
@@ -371,6 +394,18 @@ async def create_booking(payload: BookingCreate, user: dict = Depends(require_ro
     }
     await db.bookings.insert_one(doc)
     doc.pop("_id", None)
+    # Notify all online, verified mechanics that match the vehicle or general fit
+    async for m in db.users.find({"role": "mechanic", "is_verified": True, "is_online": True, "location": {"$ne": None}}, {"_id": 0, "id": 1, "location": 1}):
+        loc = m.get("location") or {}
+        if "lat" not in loc: continue
+        d = haversine_km(payload.lat, payload.lng, loc["lat"], loc["lng"])
+        if d <= 30:
+            await _emit_notification(
+                m["id"], "new_booking",
+                f"New Job · {price_for(payload.breakdown_category):.0f}",
+                f"{payload.breakdown_category.replace('_',' ').title()} · {payload.vehicle_type.upper()} · {round(d,1)} km away",
+                doc["id"],
+            )
     return booking_to_out(doc)
 
 @api.get("/bookings", response_model=List[BookingOut])
@@ -466,6 +501,12 @@ async def accept_booking(booking_id: str, user: dict = Depends(require_role("mec
     await db.bookings.update_one({"id": booking_id}, {"$set": upd})
     b.update(upd)
     b.pop("_id", None)
+    await _emit_notification(
+        b["customer_id"], "booking_accepted",
+        "Mechanic on the way",
+        f"{user['name']} accepted your request · ETA {eta} min",
+        booking_id,
+    )
     return booking_to_out(b)
 
 @api.post("/bookings/{booking_id}/start", response_model=BookingOut)
@@ -476,6 +517,12 @@ async def start_work(booking_id: str, user: dict = Depends(require_role("mechani
     await db.bookings.update_one({"id": booking_id}, {"$set": {"status": "in_progress"}})
     b["status"] = "in_progress"
     b.pop("_id", None)
+    await _emit_notification(
+        b["customer_id"], "work_started",
+        "Work started",
+        f"{user['name']} has started the repair. OTP: {b.get('otp','')}",
+        booking_id,
+    )
     return booking_to_out(b)
 
 class CompleteIn(BaseModel):
@@ -494,6 +541,12 @@ async def complete_booking(booking_id: str, payload: CompleteIn, user: dict = De
     b["status"] = "completed"
     b["completed_at"] = now_iso()
     b.pop("_id", None)
+    await _emit_notification(
+        b["customer_id"], "completed",
+        "Service completed",
+        f"Please pay ₹{b['price']:.0f} and rate {user['name']}.",
+        booking_id,
+    )
     return booking_to_out(b)
 
 @api.post("/bookings/{booking_id}/cancel", response_model=BookingOut)
@@ -605,6 +658,30 @@ async def ai_chat_sync(payload: AIChatIn, user: dict = Depends(get_current_user)
     except Exception as e:
         raise HTTPException(500, f"AI error: {e}")
     return {"reply": text, "session_id": session_id}
+
+# ============================================================================
+# NOTIFICATIONS (in-app)
+# ============================================================================
+
+@api.get("/notifications", response_model=List[NotificationOut])
+async def list_notifications(user: dict = Depends(get_current_user), limit: int = 50):
+    cursor = db.notifications.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).limit(limit)
+    return [NotificationOut(**n) async for n in cursor]
+
+@api.get("/notifications/unread-count")
+async def unread_count(user: dict = Depends(get_current_user)):
+    n = await db.notifications.count_documents({"user_id": user["id"], "read": False})
+    return {"count": n}
+
+@api.post("/notifications/mark-read")
+async def mark_all_read(user: dict = Depends(get_current_user)):
+    await db.notifications.update_many({"user_id": user["id"], "read": False}, {"$set": {"read": True}})
+    return {"ok": True}
+
+@api.post("/notifications/{notif_id}/read")
+async def mark_one_read(notif_id: str, user: dict = Depends(get_current_user)):
+    await db.notifications.update_one({"id": notif_id, "user_id": user["id"]}, {"$set": {"read": True}})
+    return {"ok": True}
 
 # ============================================================================
 # SOS

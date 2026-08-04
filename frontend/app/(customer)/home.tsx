@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator, TextInput, Modal, Image } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -9,6 +9,8 @@ import { colors, spacing, radius } from "@/src/lib/theme";
 import { api, BREAKDOWN_CATEGORIES, VEHICLE_TYPES, loadUser, Mechanic, User } from "@/src/lib/api";
 import MapView from "@/src/components/MapView";
 import { useLiveLocation } from "@/src/hooks/use-live-location";
+import { useNotifications } from "@/src/hooks/use-notifications";
+import NotificationToast from "@/src/components/NotificationToast";
 
 export default function Home() {
   const router = useRouter();
@@ -23,6 +25,9 @@ export default function Home() {
   const [photo, setPhoto] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const { latest, unread } = useNotifications(true);
+  const [toast, setToast] = useState<any>(null);
+  useEffect(() => { if (latest && latest.id !== toast?.id) setToast(latest); }, [latest]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -93,11 +98,25 @@ export default function Home() {
           <MaterialCommunityIcons name="account-circle" size={22} color={colors.brand} />
           <Text style={styles.pillText}>{user?.name ?? "Guest"}</Text>
         </Pressable>
-        <View style={styles.pill}>
-          <MaterialCommunityIcons name="wallet" size={18} color={colors.warning} />
-          <Text style={styles.pillText}>₹{user?.wallet_balance?.toFixed(0) ?? 0}</Text>
+        <View style={{ flexDirection: "row", gap: spacing.sm }}>
+          <Pressable testID="bell-button" onPress={() => router.push("/notifications")} style={[styles.pill, styles.bellPill]}>
+            <MaterialCommunityIcons name="bell" size={18} color={colors.text} />
+            {unread > 0 && (
+              <View style={styles.badge}><Text style={styles.badgeText}>{unread > 9 ? "9+" : unread}</Text></View>
+            )}
+          </Pressable>
+          <View style={styles.pill}>
+            <MaterialCommunityIcons name="wallet" size={18} color={colors.warning} />
+            <Text style={styles.pillText}>₹{user?.wallet_balance?.toFixed(0) ?? 0}</Text>
+          </View>
         </View>
       </SafeAreaView>
+
+      <NotificationToast
+        item={toast}
+        onDismiss={() => setToast(null)}
+        onPress={(n) => n.booking_id && router.push(`/(customer)/booking/${n.booking_id}`)}
+      />
 
       {(perm === "denied" || perm === "blocked") && (
         <SafeAreaView edges={["top"]} style={styles.permWrap} pointerEvents="box-none">
@@ -277,6 +296,9 @@ const styles = StyleSheet.create({
   topOverlay: { position: "absolute", top: 0, left: 0, right: 0, paddingHorizontal: spacing.lg, flexDirection: "row", justifyContent: "space-between", gap: spacing.md },
   permWrap: { position: "absolute", top: 60, left: 0, right: 0, paddingHorizontal: spacing.lg },
   pill: { flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: colors.surface2, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, marginTop: spacing.sm },
+  bellPill: { paddingHorizontal: spacing.md, position: "relative" },
+  badge: { position: "absolute", top: -4, right: -4, minWidth: 18, height: 18, borderRadius: 9, backgroundColor: colors.brand, paddingHorizontal: 4, alignItems: "center", justifyContent: "center" },
+  badgeText: { color: "#fff", fontSize: 10, fontWeight: "900" },
   pillText: { color: colors.text, fontWeight: "700", fontSize: 13 },
   sosBtn: { position: "absolute", right: spacing.lg, bottom: 320, width: 68, height: 68, borderRadius: 34, backgroundColor: colors.brand, alignItems: "center", justifyContent: "center", shadowColor: colors.brand, shadowOpacity: 0.6, shadowRadius: 14, shadowOffset: { width: 0, height: 4 }, elevation: 10, borderWidth: 3, borderColor: "#fff" },
   sosText: { color: "#fff", fontWeight: "900", fontSize: 11, letterSpacing: 1 },

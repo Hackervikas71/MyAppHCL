@@ -1,7 +1,6 @@
 import { useEffect } from "react";
-import { View, Text, StyleSheet, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, ActivityIndicator, Image } from "react-native";
 import { useRouter } from "expo-router";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { colors, spacing } from "@/src/lib/theme";
 import { loadUser } from "@/src/lib/api";
 
@@ -22,11 +21,9 @@ export default function Index() {
 
   return (
     <View style={styles.container} testID="splash-screen">
-      <View style={styles.logoWrap}>
-        <MaterialCommunityIcons name="tow-truck" size={64} color={colors.brand} />
-      </View>
-      <Text style={styles.brand}>HIGHWAY MECHANIC</Text>
-      <Text style={styles.sub}>Connect · Repair · Roll</Text>
+      <Image source={require("@/assets/images/icon.png")} style={styles.logo} resizeMode="contain" />
+      <Text style={styles.brand}>ARVIK</Text>
+      <Text style={styles.sub}>Help on the way</Text>
       <ActivityIndicator color={colors.brand} style={{ marginTop: spacing.xxl }} />
     </View>
   );
@@ -34,7 +31,7 @@ export default function Index() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" },
-  logoWrap: { width: 100, height: 100, borderRadius: 24, backgroundColor: colors.brandDim, alignItems: "center", justifyContent: "center", marginBottom: spacing.xl, borderWidth: 1, borderColor: colors.brand },
-  brand: { fontSize: 28, fontWeight: "900", color: colors.text, letterSpacing: 2 },
-  sub: { fontSize: 13, color: colors.textMuted, marginTop: spacing.sm, letterSpacing: 1 },
+  logo: { width: 180, height: 180, marginBottom: spacing.md },
+  brand: { fontSize: 34, fontWeight: "900", color: colors.text, letterSpacing: 4 },
+  sub: { fontSize: 13, color: colors.textMuted, marginTop: spacing.sm, letterSpacing: 2, textTransform: "uppercase" },
 });

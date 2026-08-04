@@ -1,0 +1,34 @@
+{
+  "summary": "Iteration 5 — In-app notifications (Feature A) and Arvik rebrand (Feature B) both PASS end-to-end. Backend: 8/8 tests green in /app/backend/tests/test_notifications_arvik.py — full lifecycle (customer creates booking → mechanic1 receives new_booking notif within 30km & online; mechanic accepts → customer receives booking_accepted with mechanic name + ETA in body; mechanic starts → customer receives work_started with OTP in body; mechanic completes with correct OTP → customer receives completed), mark-all-read zeroes unread-count, single-notif read marks only that one, all 4 /api/notifications endpoints return 401 unauthenticated, and an offline mechanic does NOT receive new_booking (verified via toggle-online off then create booking → mech1 unread count unchanged). Regression: auth login for all 3 roles, booking accept→start→complete→rate, Stripe /api/payments/checkout/session returns url+session_id, /api/bookings/{id}/mechanic-location returns 200, photo_base64 persists across GET. Frontend (Playwright, 390x844 mobile viewport): Arvik branding verified on login ('Welcome to Arvik', 'Help on the way' both rendered; logo Image renders from /assets/images/icon.png). Customer home shows testID=bell-button with red badge count 4 (historical unread carried over — expected). Tapping bell → notifications-screen renders, mark-all-read-button and notifications-back-button both work; badge dismisses and back returns to customer home with bell still visible. Mechanic1 dashboard shows testID=mechanic-bell-button; tap opens notifications-screen. TOAST TEST: with customer home visible, backend-driven booking accept fired from mechanic1 API session → within ~5s the customer screen rendered testID=notification-toast with 'Mechanic on the way / Ravi Kumar accepted your request · ETA 3 min' — full-width red toast slid down from top as specified. Only carried-over cosmetic warnings: 'shadow*' and 'props.pointerEvents' deprecation notices on web (unchanged from prior iterations).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "web preview (all screens)", "issues": ["Non-blocking deprecation warnings from prior iterations persist on web: 'shadow*' style props (use boxShadow) and 'props.pointerEvents' (use style.pointerEvents). Cosmetic only."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_notifications_arvik.py",
+    "/app/test_reports/pytest/iter5_notifications.xml"
+  ],
+  "action_items": [
+    "(Optional, minor) In /app/frontend/app/notifications.tsx::open() the router always pushes to /(customer)/booking/{id}; for a mechanic tapping their own new_booking notif this route will 404 or misroute. Consider routing based on user.role (mechanic → /(mechanic)/job/{id}). Not blocking — current spec test cases still pass because customer is the primary consumer of tap-to-open.",
+    "(Optional, cosmetic) Migrate deprecated web style props to boxShadow/style.pointerEvents to silence console warnings (carried from prior iterations)."
+  ],
+  "critical_code_review_comments": [
+    "server.py _emit_notification correctly excludes _id in NotificationOut model — no ObjectId leaks (verified in test).",
+    "create_booking notifies only online + verified + within-30km mechanics via haversine — matches spec exactly and confirmed via offline-mechanic negative test.",
+    "accept_booking includes mechanic name and ETA in body; start_work includes OTP; complete includes price — all matched via string contains assertions.",
+    "useNotifications hook seeds seenIds on first load so it does NOT fire toast for historical unread items — verified: no toast fired on initial customer login despite 4 pre-existing unread items; toast fired only for the truly new booking_accepted event.",
+    "NotificationToast uses ref-guarded item.id equality to prevent duplicate re-fires; slide-down + 4s auto-dismiss + tap-to-navigate all present.",
+    "notifications.tsx routes tapped notifs to /(customer)/booking/{id} unconditionally — see action_items above."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "100% — Arvik brand, customer bell+badge, mechanic bell, notifications-screen, mark-all-read, back, and toast all verified"},
+  "seed_data_creation": "Ephemeral TEST bookings created and cancelled per test; TEST_ prefix used in description fields for identification.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Notification polling interval is 5s; when testing toast, mark existing notifications read first (or wait for firstLoad seedIds to settle) then trigger the event and wait up to ~10s. Toast testID is 'notification-toast'. Customer bell testID='bell-button', mechanic bell testID='mechanic-bell-button'. Inbox screen testID='notifications-screen' with 'mark-all-read-button' and 'notifications-back-button'. Splash screen testID='splash-screen' auto-redirects to /login in ~700ms — quick to miss in Playwright, wait longer if you want to catch it. Login screen shows Arvik branding + logo Image (/assets/images/icon.png). Regression suite in test_notifications_arvik.py::TestRegression provides quick smoke coverage for future iterations."
+}

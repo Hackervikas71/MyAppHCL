@@ -1,7 +1,6 @@
 import { useState } from "react";
-import { View, Text, TextInput, Pressable, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator } from "react-native";
+import { View, Text, TextInput, Pressable, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, Image } from "react-native";
 import { useRouter } from "expo-router";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { colors, spacing, radius } from "@/src/lib/theme";
 import { api, saveAuth } from "@/src/lib/api";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -31,11 +30,9 @@ export default function Login() {
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <View style={styles.header}>
-            <View style={styles.logoBox}>
-              <MaterialCommunityIcons name="tow-truck" size={40} color={colors.brand} />
-            </View>
-            <Text style={styles.title}>Welcome Back</Text>
-            <Text style={styles.subtitle}>Sign in to get roadside help fast</Text>
+            <Image source={require("@/assets/images/icon.png")} style={styles.logoImg} resizeMode="contain" />
+            <Text style={styles.title}>Welcome to Arvik</Text>
+            <Text style={styles.subtitle}>Help on the way — sign in to get started</Text>
           </View>
 
           <View style={styles.form}>
@@ -85,7 +82,7 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.surface },
   scroll: { padding: spacing.xl, flexGrow: 1 },
   header: { alignItems: "center", marginTop: spacing.xxl, marginBottom: spacing.xxl },
-  logoBox: { width: 84, height: 84, borderRadius: 20, backgroundColor: colors.brandDim, alignItems: "center", justifyContent: "center", marginBottom: spacing.lg, borderWidth: 1, borderColor: colors.brand },
+  logoImg: { width: 120, height: 120, marginBottom: spacing.sm },
   title: { fontSize: 28, fontWeight: "900", color: colors.text, letterSpacing: 0.5 },
   subtitle: { fontSize: 14, color: colors.textMuted, marginTop: spacing.xs },
   form: { gap: spacing.sm },

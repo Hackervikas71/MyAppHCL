@@ -23,9 +23,9 @@ export default function Profile() {
   }
 
   const items: { label: string; icon: any; testID: string; onPress?: () => void }[] = [
+    { label: "Notifications", icon: "bell-outline", testID: "menu-notifications", onPress: () => router.push("/notifications") },
     { label: "Emergency Contacts", icon: "phone-alert", testID: "menu-emergency" },
     { label: "Saved Vehicles", icon: "car-multiple", testID: "menu-vehicles" },
-    { label: "Notifications", icon: "bell-outline", testID: "menu-notifications" },
     { label: "Support", icon: "headset", testID: "menu-support" },
     { label: "Privacy & Terms", icon: "shield-check-outline", testID: "menu-privacy" },
   ];

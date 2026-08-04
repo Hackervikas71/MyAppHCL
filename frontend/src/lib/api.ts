@@ -125,6 +125,11 @@ export const api = {
 
   sos: (lat: number, lng: number, message?: string) => req<any>(`/sos`, { method: "POST", body: JSON.stringify({ lat, lng, message }) }),
 
+  listNotifications: () => req<any[]>(`/notifications`),
+  unreadCount: () => req<{ count: number }>(`/notifications/unread-count`),
+  markAllRead: () => req<{ ok: boolean }>(`/notifications/mark-read`, { method: "POST" }),
+  markRead: (id: string) => req<{ ok: boolean }>(`/notifications/${id}/read`, { method: "POST" }),
+
   createCheckout: (booking_id: string, origin_url: string) =>
     req<{ url: string; session_id: string }>(`/payments/checkout/session`, { method: "POST", body: JSON.stringify({ booking_id, origin_url }) }),
   checkoutStatus: (session_id: string) =>

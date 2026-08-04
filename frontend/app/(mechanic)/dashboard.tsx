@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable, Switch, ActivityIndicator, RefreshControl } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -7,6 +7,8 @@ import * as Haptics from "expo-haptics";
 import { colors, spacing, radius } from "@/src/lib/theme";
 import { api, loadUser, User, Booking, categoryLabel } from "@/src/lib/api";
 import { useLiveLocation } from "@/src/hooks/use-live-location";
+import { useNotifications } from "@/src/hooks/use-notifications";
+import NotificationToast from "@/src/components/NotificationToast";
 
 export default function MechanicDashboard() {
   const router = useRouter();
@@ -16,6 +18,9 @@ export default function MechanicDashboard() {
   const [online, setOnline] = useState(false);
   const [busy, setBusy] = useState(false);
   const { perm } = useLiveLocation(true);
+  const { latest, unread } = useNotifications(true);
+  const [toast, setToast] = useState<any>(null);
+  useEffect(() => { if (latest && latest.id !== toast?.id) setToast(latest); }, [latest]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -50,6 +55,11 @@ export default function MechanicDashboard() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]} testID="mechanic-dashboard">
+      <NotificationToast
+        item={toast}
+        onDismiss={() => setToast(null)}
+        onPress={(n) => n.booking_id && router.push(`/(mechanic)/job/${n.booking_id}` as any)}
+      />
       <ScrollView
         contentContainerStyle={{ padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxxl }}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.brand} />}
@@ -59,9 +69,17 @@ export default function MechanicDashboard() {
             <Text style={styles.hi}>Hello,</Text>
             <Text style={styles.name}>{user?.name?.split(" ")[0] ?? "Mechanic"}</Text>
           </View>
-          <View style={styles.toggleWrap}>
-            <Text style={[styles.toggleLabel, { color: online ? colors.success : colors.textMuted }]}>{online ? "ONLINE" : "OFFLINE"}</Text>
-            <Switch testID="online-toggle" value={online} onValueChange={toggleOnline} trackColor={{ true: colors.success, false: colors.surface3 }} thumbColor="#fff" />
+          <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.md }}>
+            <Pressable testID="mechanic-bell-button" onPress={() => router.push("/notifications")} style={styles.bellBtn}>
+              <MaterialCommunityIcons name="bell" size={20} color={colors.text} />
+              {unread > 0 && (
+                <View style={styles.badge}><Text style={styles.badgeText}>{unread > 9 ? "9+" : unread}</Text></View>
+              )}
+            </Pressable>
+            <View style={styles.toggleWrap}>
+              <Text style={[styles.toggleLabel, { color: online ? colors.success : colors.textMuted }]}>{online ? "ONLINE" : "OFFLINE"}</Text>
+              <Switch testID="online-toggle" value={online} onValueChange={toggleOnline} trackColor={{ true: colors.success, false: colors.surface3 }} thumbColor="#fff" />
+            </View>
           </View>
         </View>
 
@@ -164,6 +182,9 @@ const styles = StyleSheet.create({
   hi: { color: colors.textMuted, fontSize: 14 },
   name: { color: colors.text, fontSize: 24, fontWeight: "900" },
   toggleWrap: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  bellBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surface2, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border, position: "relative" },
+  badge: { position: "absolute", top: -4, right: -4, minWidth: 18, height: 18, borderRadius: 9, backgroundColor: colors.brand, paddingHorizontal: 4, alignItems: "center", justifyContent: "center" },
+  badgeText: { color: "#fff", fontSize: 10, fontWeight: "900" },
   toggleLabel: { fontSize: 11, fontWeight: "900", letterSpacing: 1 },
   warn: { flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: "rgba(255,204,0,0.15)", padding: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.warning },
   warnText: { color: colors.warning, fontSize: 12, flex: 1 },
