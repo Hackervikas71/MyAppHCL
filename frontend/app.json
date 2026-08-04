@@ -62,7 +62,8 @@
           "photosPermission": "Attach breakdown photos to your service request",
           "cameraPermission": "Take a photo of the vehicle breakdown"
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true

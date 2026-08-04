@@ -1,0 +1,38 @@
+{
+  "summary": "Iteration 7 (Emergent-managed Google Sign-In + dual-token auth) — ALL PASS. Backend: 17/17 tests green in /app/backend/tests/test_iter7_google_oauth.py. Google OAuth CONTRACT verified: POST /api/auth/session with bogus session_id returns 401 (external call to demobackend.emergentagent.com fails/invalid → mapped to 401); {session_token:...} (wrong key) returns 422; {} returns 422. Legacy JWT path still works: /api/auth/login for customer/mechanic/admin all 200, /api/auth/me works via dual-token dep and returns the new UserOut fields picture (null) + google_linked (false). Booking full lifecycle regression (create flat_tyre ₹350 → mechanic accept → start → GET otp → complete → rate 5) all 200 with GET-verify persistence. Notifications inbox + unread-count both 200 authenticated, 401 unauthenticated. Stripe checkout /api/payments/checkout/session returns valid url + session_id. /api/auth/logout returns {ok:true} 200 for both an authenticated JWT (no-op since session table has nothing to delete) and no-auth. MongoDB indexes verified via pymongo: user_sessions.session_token is unique, user_sessions.expires_at has expireAfterSeconds TTL, users.email is unique. Frontend (Playwright, 390x844 mobile viewport): (1) /login renders 'Continue with Google' button testID=google-signin-button below email/password with OR divider (2 OR occurrences — divider text visible); (2) Clicking google-signin-button navigates to https://auth.emergentagent.com/oauth/?redirect=https%3A%2F%2Fmechanic-connect-116.preview.emergentagent.com%2F — redirect param properly URL-encoded to the exact origin/; (3) Splash /?session_id=fake_test_bogus_id → backend returns 401 → splash falls through to /login (no stuck spinner) and the session_id is stripped from window.location.href (final URL is clean /login); (4) Legacy customer login (customer@hmc.app/customer123) succeeds → navigates to /home → localStorage contains new keys arvik_token + arvik_user, legacy hmc_token key is absent (confirming storage migration complete); /api/auth/me called with arvik_token returns 200 email=customer@hmc.app google_linked=false (dual-token dep resolves legacy JWT correctly); (5) POST /api/auth/logout with the stored JWT returns {status:200, ok:true} and post-logout localStorage.arvik_token is null (verified via JS eval); (6) Mechanic login (mechanic1@hmc.app/ravi123) → /dashboard renders; Admin login (admin@hmc.app/admin123) → /dashboard renders admin content. (7) Notifications bell click navigates to /notifications. Deprecation warnings 'shadow*' / 'props.pointerEvents' persist from prior iterations (cosmetic).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "login", "issues": ["'Continue with Google' button and OR divider render cleanly below the SIGN IN button — no overlap, spacing correct, Google 'G' logo visible."]},
+      {"screen": "all", "issues": ["Carried-over non-blocking deprecation warnings: 'shadow*' style props → boxShadow; 'props.pointerEvents' → style.pointerEvents. Cosmetic only, unchanged from iter 3-6."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter7_google_oauth.py",
+    "/app/test_reports/pytest/iter7_results.xml"
+  ],
+  "action_items": [
+    "(Optional, cosmetic, carried from iter 3-6) Migrate deprecated web style props to boxShadow / style.pointerEvents to silence console warnings.",
+    "(Info only) Real Emergent Google OAuth end-to-end flow was NOT exercised — Emergent's hosted auth requires a real Google account interaction outside this test environment. MOCKED-EQUIVALENT verified: bogus session_id → 401, wrong body key → 422, missing body → 422, button redirects to correct auth.emergentagent.com URL, splash consumes session_id and strips it from URL. All contract points hold."
+  ],
+  "critical_code_review_comments": [
+    "server.py:196-223 get_current_user tries user_sessions.session_token first (with tz-aware expires_at guard), then falls back to legacy JWT decode. Correct dual-token semantics. If the same string is both a session_token AND a valid JWT (impossible in practice) session takes priority — expected.",
+    "server.py:327-387 POST /api/auth/session exchanges via httpx.AsyncClient with 15s timeout, maps upstream non-200 → 401 with generic 'Invalid or expired session' (safe — doesn't leak Emergent internals). Upsert-by-email preserves existing role (existing users don't get demoted to customer). session_token stored with 7-day expiry.",
+    "server.py:988-999 startup creates indexes: users.email unique, users.id unique, user_sessions.session_token unique, user_sessions.expires_at TTL — all verified live via pymongo introspection.",
+    "server.py:389-394 logout is idempotent and safe for any bearer (session tokens get deleted, JWTs are no-op) — returns 200 always so client can proceed to clear storage without racing on a 404.",
+    "google-auth.ts:38-44 exchangeSessionId guards against double-submit via in-memory Set (correct — Emergent session_id is one-time-use).",
+    "google-auth.ts:80-102 consumeWebCallbackIfAny reads both ?session_id and #session_id, calls exchange, then history.replaceState with session_id stripped (preserves other query/hash) — verified: final URL after 401 is clean /login.",
+    "google-auth.ts:53 authUrl uses encodeURIComponent(redirectUrl) — verified live redirect target is https://auth.emergentagent.com/oauth/?redirect=<encoded-origin>/",
+    "api.ts:4-5 storage keys correctly renamed to arvik_token / arvik_user; verified in browser localStorage — no legacy hmc_token key present after fresh login.",
+    "UserOut adds picture (Optional[str]) and google_linked (bool default False) — verified in /api/auth/me response for legacy user."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (17/17)", "frontend": "100% — Google button wired, splash callback consumes+strips, legacy JWT + arvik_* storage regression clean across customer/mechanic/admin, logout endpoint returns 200"},
+  "seed_data_creation": "Ephemeral TEST_iter7 bookings created and completed/cancelled per test; TEST_ prefix used in description fields. No permanent seed changes.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 7 Emergent Google OAuth verified end-to-end at the CONTRACT level. The real Google account exchange cannot be exercised from Playwright (would require a real Google interaction on auth.emergentagent.com) — the 401 path from bogus session_id is the definitive negative test. Storage keys are now arvik_token / arvik_user (localStorage on web, expo-secure-store on native). Dual-token get_current_user resolves session_token first, then falls back to JWT — both paths verified. Route redirect on login: customer→/home, mechanic→/dashboard, admin→/dashboard (Expo Router strips the group segment). Backend logout endpoint is idempotent and safe for both token types. MOCKED clarification: We could not verify real Google account creation-as-customer / existing-user-linking / session_token persistence via live Emergent OAuth — only the contract (endpoint accepts session_id, exchanges via upstream, returns 401 on invalid, would upsert-by-email on valid)."
+}

@@ -1,15 +1,18 @@
 import { useState } from "react";
 import { View, Text, TextInput, Pressable, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, Image } from "react-native";
 import { useRouter } from "expo-router";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { colors, spacing, radius } from "@/src/lib/theme";
 import { api, saveAuth } from "@/src/lib/api";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { startGoogleLogin } from "@/src/lib/google-auth";
 
 export default function Login() {
   const router = useRouter();
   const [email, setEmail] = useState("customer@hmc.app");
   const [password, setPassword] = useState("customer123");
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   async function onLogin() {
@@ -23,6 +26,20 @@ export default function Login() {
     } catch (e: any) {
       setErr("Invalid email or password");
     } finally { setLoading(false); }
+  }
+
+  async function onGoogle() {
+    setErr(null); setGoogleLoading(true);
+    try {
+      const user = await startGoogleLogin();
+      if (!user) { setGoogleLoading(false); return; } // web: page redirected; native: user cancelled
+      if (user.role === "customer") router.replace("/(customer)/home");
+      else if (user.role === "mechanic") router.replace("/(mechanic)/dashboard");
+      else router.replace("/(admin)/dashboard");
+    } catch (e: any) {
+      setErr("Google sign-in failed. Please try again.");
+      setGoogleLoading(false);
+    }
   }
 
   return (
@@ -61,6 +78,22 @@ export default function Login() {
             <Pressable testID="login-submit-button" onPress={onLogin} disabled={loading} style={({ pressed }) => [styles.primary, pressed && { opacity: 0.85 }]}>
               {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>SIGN IN</Text>}
             </Pressable>
+
+            <View style={styles.dividerRow}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>OR</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            <Pressable testID="google-signin-button" onPress={onGoogle} disabled={googleLoading} style={({ pressed }) => [styles.google, pressed && { opacity: 0.85 }]}>
+              {googleLoading ? <ActivityIndicator color={colors.text} /> : (
+                <>
+                  <MaterialCommunityIcons name="google" size={20} color="#EA4335" />
+                  <Text style={styles.googleText}>Continue with Google</Text>
+                </>
+              )}
+            </Pressable>
+
             <Pressable testID="go-to-register-button" onPress={() => router.push("/register")}>
               <Text style={styles.link}>New here? <Text style={{ color: colors.brand, fontWeight: "700" }}>Create Account</Text></Text>
             </Pressable>
@@ -90,6 +123,11 @@ const styles = StyleSheet.create({
   input: { backgroundColor: colors.surface2, color: colors.text, borderRadius: radius.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, fontSize: 16, borderWidth: 1, borderColor: colors.border },
   primary: { backgroundColor: colors.brand, paddingVertical: spacing.lg, borderRadius: radius.md, alignItems: "center", marginTop: spacing.xl },
   primaryText: { color: "#fff", fontWeight: "900", fontSize: 15, letterSpacing: 1.5 },
+  dividerRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, marginTop: spacing.lg },
+  dividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
+  dividerText: { color: colors.textMuted, fontSize: 11, fontWeight: "800", letterSpacing: 1 },
+  google: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, backgroundColor: "#fff", borderWidth: 1, borderColor: colors.borderStrong, paddingVertical: spacing.md, borderRadius: radius.md, marginTop: spacing.md },
+  googleText: { color: colors.text, fontWeight: "700", fontSize: 15 },
   link: { color: colors.textDim, textAlign: "center", marginTop: spacing.lg, fontSize: 14 },
   err: { color: colors.brand, marginTop: spacing.sm, fontSize: 13 },
   hintBox: { marginTop: spacing.xl, backgroundColor: colors.surface2, padding: spacing.lg, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border },

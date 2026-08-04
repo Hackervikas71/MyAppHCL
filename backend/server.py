@@ -21,6 +21,7 @@ import jwt as pyjwt
 
 from emergentintegrations.llm.chat import LlmChat, UserMessage, TextDelta, StreamDone
 from emergentintegrations.payments.stripe.checkout import StripeCheckout, CheckoutSessionRequest
+import httpx
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -77,6 +78,8 @@ class UserOut(BaseModel):
     wallet_balance: float = 0.0
     location: Optional[dict] = None
     garage_address: Optional[str] = None
+    picture: Optional[str] = None
+    google_linked: bool = False
 
 class TokenOut(BaseModel):
     access_token: str
@@ -194,6 +197,22 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(401, "Missing or invalid Authorization header")
     token = authorization.split(" ", 1)[1]
+
+    # 1) Try Emergent session_token first (7-day rotating tokens)
+    session = await db.user_sessions.find_one({"session_token": token}, {"_id": 0})
+    if session:
+        expires_at = session.get("expires_at")
+        if isinstance(expires_at, datetime):
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+            if expires_at < datetime.now(timezone.utc):
+                raise HTTPException(401, "Session expired")
+        user = await db.users.find_one({"id": session["user_id"]}, {"_id": 0, "password": 0})
+        if not user:
+            raise HTTPException(401, "User not found")
+        return user
+
+    # 2) Fall back to legacy JWT (email/password auth)
     try:
         payload = pyjwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGO])
     except pyjwt.PyJWTError:
@@ -225,6 +244,8 @@ def user_to_out(u: dict) -> UserOut:
         wallet_balance=u.get("wallet_balance", 0.0),
         location=u.get("location"),
         garage_address=u.get("garage_address"),
+        picture=u.get("picture"),
+        google_linked=u.get("google_linked", False),
     )
 
 def haversine_km(lat1, lng1, lat2, lng2):
@@ -295,6 +316,82 @@ async def login(payload: UserLogin):
 @api.get("/auth/me", response_model=UserOut)
 async def me(user: dict = Depends(get_current_user)):
     return user_to_out(user)
+
+# ---------------------- Emergent Google OAuth ---------------------- #
+
+class SessionIn(BaseModel):
+    session_id: str
+
+_EMERGENT_SESSION_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
+
+@api.post("/auth/session")
+async def google_session_exchange(payload: SessionIn):
+    """Exchange a one-time Emergent session_id for a 7-day session_token, upsert the user."""
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(_EMERGENT_SESSION_URL, headers={"X-Session-ID": payload.session_id})
+    except Exception as e:
+        logger.exception("Emergent session-data call failed")
+        raise HTTPException(401, f"Auth exchange failed: {e}")
+
+    if resp.status_code != 200:
+        raise HTTPException(401, "Invalid or expired session")
+
+    data = resp.json()
+    email = (data.get("email") or "").lower().strip()
+    name = data.get("name") or email.split("@")[0]
+    picture = data.get("picture")
+    session_token = data.get("session_token")
+    if not email or not session_token:
+        raise HTTPException(401, "Malformed session response")
+
+    # Upsert user by email (reuse existing id + role if already registered)
+    existing = await db.users.find_one({"email": email})
+    if existing:
+        uid = existing["id"]
+        await db.users.update_one(
+            {"id": uid},
+            {"$set": {"name": name, "picture": picture, "google_linked": True}},
+        )
+    else:
+        uid = f"user_{uuid.uuid4().hex[:12]}"
+        await db.users.insert_one({
+            "id": uid,
+            "name": name,
+            "email": email,
+            "phone": "",
+            "password": None,
+            "role": "customer",
+            "is_verified": True,
+            "is_online": False,
+            "picture": picture,
+            "google_linked": True,
+            "rating": 5.0, "total_jobs": 0, "wallet_balance": 0.0,
+            "location": None,
+            "created_at": now_iso(),
+        })
+
+    expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+    await db.user_sessions.update_one(
+        {"session_token": session_token},
+        {"$set": {
+            "session_token": session_token,
+            "user_id": uid,
+            "expires_at": expires_at,
+            "created_at": datetime.now(timezone.utc),
+        }},
+        upsert=True,
+    )
+
+    user_doc = await db.users.find_one({"id": uid}, {"_id": 0, "password": 0})
+    return {"access_token": session_token, "token_type": "bearer", "user": user_to_out(user_doc).model_dump()}
+
+@api.post("/auth/logout")
+async def logout_current(authorization: Optional[str] = Header(None)):
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ", 1)[1]
+        await db.user_sessions.delete_one({"session_token": token})
+    return {"ok": True}
 
 @api.post("/auth/location")
 async def update_location(loc: LocationUpdate, user: dict = Depends(get_current_user)):
@@ -890,6 +987,15 @@ async def seed_data():
 
 @app.on_event("startup")
 async def on_startup():
+    # Indexes for auth
+    try:
+        await db.users.create_index("email", unique=True)
+        await db.users.create_index("id", unique=True)
+        await db.user_sessions.create_index("session_token", unique=True)
+        await db.user_sessions.create_index("user_id")
+        await db.user_sessions.create_index("expires_at", expireAfterSeconds=0)
+    except Exception as e:
+        logger.warning("Index setup issue: %s", e)
     await seed_data()
 
 @app.on_event("shutdown")

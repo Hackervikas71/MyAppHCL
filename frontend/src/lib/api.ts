@@ -1,8 +1,8 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Storage from "@/src/lib/secure-storage";
 
 const BASE = process.env.EXPO_PUBLIC_BACKEND_URL;
-const TOKEN_KEY = "hmc_token";
-const USER_KEY = "hmc_user";
+const TOKEN_KEY = "arvik_token";
+const USER_KEY = "arvik_user";
 
 export type Role = "customer" | "mechanic" | "admin";
 
@@ -20,6 +20,8 @@ export type User = {
   wallet_balance: number;
   location?: { lat: number; lng: number } | null;
   garage_address?: string | null;
+  picture?: string | null;
+  google_linked?: boolean;
 };
 
 export type Booking = {
@@ -63,21 +65,28 @@ export type Mechanic = {
 };
 
 async function getToken(): Promise<string | null> {
-  return AsyncStorage.getItem(TOKEN_KEY);
+  return Storage.getItem(TOKEN_KEY);
 }
 
 export async function saveAuth(token: string, user: User) {
-  await AsyncStorage.setItem(TOKEN_KEY, token);
-  await AsyncStorage.setItem(USER_KEY, JSON.stringify(user));
+  await Storage.setItem(TOKEN_KEY, token);
+  await Storage.setItem(USER_KEY, JSON.stringify(user));
 }
 
 export async function loadUser(): Promise<User | null> {
-  const s = await AsyncStorage.getItem(USER_KEY);
+  const s = await Storage.getItem(USER_KEY);
   return s ? JSON.parse(s) : null;
 }
 
 export async function logout() {
-  await AsyncStorage.multiRemove([TOKEN_KEY, USER_KEY]);
+  try { await fetch(`${BASE}/api/auth/logout`, { method: "POST", headers: await authHeaders() }); } catch {}
+  await Storage.removeItem(TOKEN_KEY);
+  await Storage.removeItem(USER_KEY);
+}
+
+async function authHeaders(): Promise<Record<string, string>> {
+  const t = await getToken();
+  return t ? { Authorization: `Bearer ${t}` } : {};
 }
 
 async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
@@ -98,6 +107,8 @@ async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
 export const api = {
   register: (body: any) => req<{ access_token: string; user: User }>(`/auth/register`, { method: "POST", body: JSON.stringify(body) }),
   login: (email: string, password: string) => req<{ access_token: string; user: User }>(`/auth/login`, { method: "POST", body: JSON.stringify({ email, password }) }),
+  exchangeGoogleSession: (session_id: string) =>
+    req<{ access_token: string; user: User }>(`/auth/session`, { method: "POST", body: JSON.stringify({ session_id }) }),
   me: () => req<User>(`/auth/me`),
   updateLocation: (lat: number, lng: number) => req(`/auth/location`, { method: "POST", body: JSON.stringify({ lat, lng }) }),
   toggleOnline: () => req<{ is_online: boolean }>(`/mechanic/toggle-online`, { method: "POST" }),

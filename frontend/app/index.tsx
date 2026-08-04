@@ -3,13 +3,16 @@ import { View, Text, StyleSheet, ActivityIndicator, Image } from "react-native";
 import { useRouter } from "expo-router";
 import { colors, spacing } from "@/src/lib/theme";
 import { loadUser } from "@/src/lib/api";
+import { consumeWebCallbackIfAny } from "@/src/lib/google-auth";
 
 export default function Index() {
   const router = useRouter();
 
   useEffect(() => {
     (async () => {
-      const u = await loadUser();
+      // Web-only: pick up ?session_id / #session_id from the OAuth callback URL first.
+      const oauthUser = await consumeWebCallbackIfAny();
+      const u = oauthUser ?? (await loadUser());
       setTimeout(() => {
         if (!u) router.replace("/login");
         else if (u.role === "customer") router.replace("/(customer)/home");
