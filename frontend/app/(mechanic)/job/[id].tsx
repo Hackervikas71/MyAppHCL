@@ -18,25 +18,14 @@ export default function MechanicJob() {
   const [busy, setBusy] = useState(false);
   const [photoOpen, setPhotoOpen] = useState(false);
   const timer = useRef<any>(null);
-  const { loc, perm } = useLiveLocation(false); // don't double-sync profile; we push per-booking below
-  const lastPush = useRef<number>(0);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { perm } = useLiveLocation(false, String(id)); // route samples through batcher for THIS booking
 
   const load = useCallback(async () => {
     try { setBooking(await api.getBooking(String(id))); } catch {}
   }, [id]);
 
   useEffect(() => { load(); timer.current = setInterval(load, 4000); return () => clearInterval(timer.current); }, [load]);
-
-  // Push mechanic's real GPS to the active booking every ~6s
-  useEffect(() => {
-    if (perm !== "granted") return;
-    if (!booking) return;
-    if (!["accepted", "arriving", "in_progress"].includes(booking.status)) return;
-    const now = Date.now();
-    if (now - lastPush.current < 6000) return;
-    lastPush.current = now;
-    api.pushMechanicLocation(String(id), loc.lat, loc.lng).catch(() => {});
-  }, [loc.lat, loc.lng, perm, booking?.status, id, booking]);
 
   async function start() {
     setBusy(true);

@@ -142,6 +142,7 @@ export const api = {
 };
 
 export const BREAKDOWN_CATEGORIES = [
+  { key: "bike_service_home", label: "Bike Service at Home", icon: "motorbike" as const },
   { key: "flat_tyre", label: "Flat Tyre", icon: "car-tire-alert" as const },
   { key: "battery_dead", label: "Battery Dead", icon: "car-battery" as const },
   { key: "engine_failure", label: "Engine Failure", icon: "engine-outline" as const },

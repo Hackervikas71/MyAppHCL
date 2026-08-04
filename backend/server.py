@@ -239,7 +239,8 @@ def price_for(category: str) -> float:
         "flat_tyre": 350, "battery_dead": 500, "engine_failure": 1200,
         "overheating": 700, "brake_failure": 900, "fuel_empty": 400,
         "locked_keys": 450, "tow_required": 1500, "electrical": 600,
-        "clutch_failure": 1000, "accident": 2000, "custom": 500,
+        "clutch_failure": 1000, "accident": 2000,
+        "bike_service_home": 799, "custom": 500,
     }
     return float(base.get(category, 500))
 

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
 import * as Location from "expo-location";
-import { api } from "@/src/lib/api";
+import { LocationBatcher } from "@/src/lib/location-batcher";
 
 export type LatLng = { lat: number; lng: number };
 export type PermState = "granted" | "denied" | "blocked" | "checking" | "unsupported";
@@ -9,16 +9,19 @@ export type PermState = "granted" | "denied" | "blocked" | "checking" | "unsuppo
 const DEFAULT: LatLng = { lat: 19.076, lng: 72.8777 };
 
 /**
- * Requests foreground location permission, gets the current position,
- * and starts a live watcher that syncs to the backend every ~10s.
- * Falls back to DEFAULT on web where permission is denied or fails.
+ * Requests foreground location permission, gets the current position, and
+ * pushes every sample into the LocationBatcher (which handles rate-limiting,
+ * distance-thresholding, and retry-on-failure).
+ *
+ * @param syncProfile  when true, samples are enqueued for `/api/auth/location`.
+ * @param bookingId    when set, samples are also enqueued for
+ *                     `/api/bookings/{id}/mechanic-location` (mechanic-side).
  */
-export function useLiveLocation(sync: boolean = true) {
+export function useLiveLocation(syncProfile: boolean = true, bookingId?: string) {
   const [loc, setLoc] = useState<LatLng>(DEFAULT);
   const [perm, setPerm] = useState<PermState>("checking");
   const [error, setError] = useState<string | null>(null);
   const watcher = useRef<Location.LocationSubscription | null>(null);
-  const lastSync = useRef<number>(0);
 
   useEffect(() => {
     let mounted = true;
@@ -47,26 +50,21 @@ export function useLiveLocation(sync: boolean = true) {
         const p: LatLng = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         if (!mounted) return;
         setLoc(p);
-        if (sync) { api.updateLocation(p.lat, p.lng).catch(() => {}); lastSync.current = Date.now(); }
+        if (syncProfile) LocationBatcher.enqueueProfile(p.lat, p.lng);
+        if (bookingId) LocationBatcher.enqueueBooking(bookingId, p.lat, p.lng);
 
         watcher.current = await Location.watchPositionAsync(
           { accuracy: Location.Accuracy.Balanced, distanceInterval: 25, timeInterval: 8000 },
           (u) => {
             const next = { lat: u.coords.latitude, lng: u.coords.longitude };
             setLoc(next);
-            if (sync && Date.now() - lastSync.current > 10000) {
-              api.updateLocation(next.lat, next.lng).catch(() => {});
-              lastSync.current = Date.now();
-            }
+            if (syncProfile) LocationBatcher.enqueueProfile(next.lat, next.lng);
+            if (bookingId) LocationBatcher.enqueueBooking(bookingId, next.lat, next.lng);
           }
         );
       } catch (e: any) {
-        if (Platform.OS === "web") {
-          setPerm("unsupported");
-        } else {
-          setPerm("denied");
-          setError(String(e?.message || e));
-        }
+        if (Platform.OS === "web") setPerm("unsupported");
+        else { setPerm("denied"); setError(String(e?.message || e)); }
       }
     })();
 
@@ -75,7 +73,7 @@ export function useLiveLocation(sync: boolean = true) {
       watcher.current?.remove();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [bookingId, syncProfile]);
 
   return { loc, perm, error };
 }

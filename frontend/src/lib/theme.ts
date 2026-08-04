@@ -1,19 +1,23 @@
 import { Platform } from "react-native";
 
+/**
+ * Arvik — Light Theme
+ * Brand orange from the logo (#FF6A00) as accent, on white surface.
+ */
 export const colors = {
-  surface: "#121212",
-  surface2: "#1E1E1E",
-  surface3: "#2C2C2E",
-  text: "#F5F5F5",
-  textDim: "#E0E0E0",
-  textMuted: "#98989D",
-  brand: "#FF3B30",
-  brandDim: "#4A110D",
-  brandSoft: "#FF6961",
-  success: "#34C759",
-  warning: "#FFCC00",
-  border: "#2C2C2E",
-  borderStrong: "#3A3A3C",
+  surface: "#FFFFFF",
+  surface2: "#F5F5F7",
+  surface3: "#E8E8ED",
+  text: "#0A0A0A",
+  textDim: "#2C2C2E",
+  textMuted: "#6E6E73",
+  brand: "#FF6A00",
+  brandDim: "#FFF3E5",
+  brandSoft: "#FFB088",
+  success: "#22C55E",
+  warning: "#F59E0B",
+  border: "#E5E7EB",
+  borderStrong: "#D1D5DB",
   onBrand: "#FFFFFF",
 };
 

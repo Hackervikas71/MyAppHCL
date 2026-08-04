@@ -11,6 +11,7 @@ import MapView from "@/src/components/MapView";
 import { useLiveLocation } from "@/src/hooks/use-live-location";
 import { useNotifications } from "@/src/hooks/use-notifications";
 import NotificationToast from "@/src/components/NotificationToast";
+import { useLocationBatcherStats } from "@/src/hooks/use-location-batcher-stats";
 
 export default function Home() {
   const router = useRouter();
@@ -28,6 +29,7 @@ export default function Home() {
   const { latest, unread } = useNotifications(true);
   const [toast, setToast] = useState<any>(null);
   useEffect(() => { if (latest && latest.id !== toast?.id) setToast(latest); }, [latest]);
+  const batcher = useLocationBatcherStats();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -121,19 +123,26 @@ export default function Home() {
       {(perm === "denied" || perm === "blocked") && (
         <SafeAreaView edges={["top"]} style={styles.permWrap} pointerEvents="box-none">
           <View style={styles.permBanner}>
-            <MaterialCommunityIcons name="map-marker-off" size={16} color="#000" />
+            <MaterialCommunityIcons name="map-marker-off" size={16} color="#7A4A00" />
             <Text style={styles.permText}>Location off — using default area. Enable in Settings for accurate matches.</Text>
           </View>
         </SafeAreaView>
       )}
 
-      {/* SOS floating button */}
+      {(batcher.profilePending || batcher.bookingsPending > 0) && (
+        <View style={styles.syncPill} testID="location-sync-indicator" pointerEvents="none">
+          <View style={[styles.syncDot, { backgroundColor: batcher.online ? colors.warning : colors.brand }]} />
+          <Text style={styles.syncText}>{batcher.online ? "Syncing…" : "Offline · will retry"}</Text>
+        </View>
+      )}
+
+      {/* SOS floating button (compact) */}
       <Pressable
         testID="sos-button"
         onPress={() => { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning); router.push("/(customer)/sos"); }}
         style={styles.sosBtn}
       >
-        <MaterialCommunityIcons name="alert-octagon" size={26} color="#fff" />
+        <MaterialCommunityIcons name="alert-octagon" size={18} color="#fff" />
         <Text style={styles.sosText}>SOS</Text>
       </Pressable>
 
@@ -300,8 +309,8 @@ const styles = StyleSheet.create({
   badge: { position: "absolute", top: -4, right: -4, minWidth: 18, height: 18, borderRadius: 9, backgroundColor: colors.brand, paddingHorizontal: 4, alignItems: "center", justifyContent: "center" },
   badgeText: { color: "#fff", fontSize: 10, fontWeight: "900" },
   pillText: { color: colors.text, fontWeight: "700", fontSize: 13 },
-  sosBtn: { position: "absolute", right: spacing.lg, bottom: 320, width: 68, height: 68, borderRadius: 34, backgroundColor: colors.brand, alignItems: "center", justifyContent: "center", shadowColor: colors.brand, shadowOpacity: 0.6, shadowRadius: 14, shadowOffset: { width: 0, height: 4 }, elevation: 10, borderWidth: 3, borderColor: "#fff" },
-  sosText: { color: "#fff", fontWeight: "900", fontSize: 11, letterSpacing: 1 },
+  sosBtn: { position: "absolute", right: spacing.lg, bottom: 320, flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, backgroundColor: colors.brand, shadowColor: colors.brand, shadowOpacity: 0.35, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 6 },
+  sosText: { color: "#fff", fontWeight: "900", fontSize: 12, letterSpacing: 1 },
   sheet: { position: "absolute", left: 0, right: 0, bottom: 0, backgroundColor: colors.surface2, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, paddingTop: spacing.sm, paddingBottom: spacing.lg, borderTopWidth: 1, borderTopColor: colors.border },
   handle: { alignSelf: "center", width: 40, height: 4, borderRadius: 2, backgroundColor: colors.borderStrong, marginBottom: spacing.md },
   sheetHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: spacing.lg },
@@ -343,5 +352,8 @@ const styles = StyleSheet.create({
   photoRemove: { position: "absolute", top: spacing.sm, right: spacing.sm, width: 30, height: 30, borderRadius: 15, backgroundColor: colors.brand, alignItems: "center", justifyContent: "center" },
   stepBtn: { flex: 1, paddingVertical: spacing.md, borderRadius: radius.md, alignItems: "center" },
   permBanner: { flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: colors.warning, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.md, marginTop: spacing.sm },
-  permText: { color: "#000", fontSize: 11, fontWeight: "700", flex: 1 },
+  permText: { color: "#7A4A00", fontSize: 11, fontWeight: "700", flex: 1 },
+  syncPill: { position: "absolute", top: 108, alignSelf: "center", flexDirection: "row", alignItems: "center", gap: spacing.xs, backgroundColor: colors.surface2, paddingHorizontal: spacing.md, paddingVertical: 4, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border },
+  syncDot: { width: 6, height: 6, borderRadius: 3 },
+  syncText: { color: colors.textDim, fontSize: 10, fontWeight: "700", letterSpacing: 0.5 },
 });

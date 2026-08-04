@@ -1,0 +1,37 @@
+{
+  "summary": "Iteration 6 (Changes A/B/C/D) — ALL PASS. Backend: 8/8 tests green in /app/backend/tests/test_iter6_bike_service.py — (Change A) POST /api/auth/location and POST /api/bookings/{id}/mechanic-location both return 200 unchanged; (Change D) creating a booking with breakdown_category='bike_service_home' returns price=799.0 and price_for is wired through create_booking (verified server.py:243 base map contains 'bike_service_home': 799); full lifecycle regression (create→accept→start[OTP]→mechanic-location update→complete with OTP→rate=5) all 200 including data-persistence GET verification; Stripe /api/payments/checkout/session returns valid url + session_id; /api/notifications and /api/notifications/unread-count return 200 authenticated and 401/403 unauthenticated. Frontend (Playwright, 390x844): Login shows white bg with 'Welcome to Arvik' + Arvik logo + orange SIGN IN button. Customer home: white surface, light-tile CartoDB map, orange REQUEST button, orange 'YOU' bubble, orange SOS PILL rendered (testID='sos-button', 74x34px — compact, bottom-right, no longer a large circle — matches Change C spec of ~90px small pill); location-sync-indicator testID is NOT present on web (expected — no GPS enqueued anything, so pill correctly stays hidden); bell-button + red badge '9+' present. Booking flow modal 'What's the issue?' renders categories in exact order — bike_service_home FIRST (testID='breakdown-bike_service_home', label 'Bike Service at Home', motorbike icon rendered), followed by flat_tyre, battery_dead, engine_failure, overheating, brake_failure, fuel_empty, locked_keys, tow_required, electrical, accident, clutch_failure, custom — 13 total, matches api.ts:144-158. Wallet: orange hero card 'AVAILABLE BALANCE ₹500.00' with white text on solid #FF6A00 (spec Change B). Mechanic earnings + mechanic dashboard also render orange hero card 'EARNINGS ₹3400'. SOS screen: orange hero card with white text on brand-orange bg. AI Help, Profile, Bookings, Notifications, Admin dashboard, Mechanic Jobs/Profile — all render white bg with dark text and orange accents. White-on-white text scan across Customer(Home, Wallet, Bookings, AI Help, Profile, SOS, Notifications), Mechanic(Dashboard, Jobs, Earnings, Profile), and Admin returned EMPTY on every screen. Bell/notification badge continues to show unread count carried from prior iterations. Only carried-over cosmetic warnings persist: 'shadow*' style props and 'props.pointerEvents' deprecation (unchanged from iter 3-5). Location batcher singleton implementation reviewed in /app/frontend/src/lib/location-batcher.ts: correct 25m/60s thresholds, 10s flush interval, retry-on-failure keeps queued sample, listeners for stats subscription, __reset test helper present.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "web preview (all screens)", "issues": ["Non-blocking deprecation warnings from prior iterations persist on web: 'shadow*' style props (use boxShadow) and 'props.pointerEvents' (use style.pointerEvents). Cosmetic only, not related to iter6 changes."]},
+      {"screen": "customer home SOS", "issues": ["Measured SOS pill width is 74px vs spec-stated ~90px. Not a defect — still a compact pill in the correct position (bottom-right, next to sheet) and passes the Change C intent; flagging only in case main agent wants exact spec width."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter6_bike_service.py",
+    "/app/test_reports/pytest/iter6_results.xml"
+  ],
+  "action_items": [
+    "(Optional) Widen SOS pill slightly (~90px) if strict spec match desired. Currently 74px — still a compact pill.",
+    "(Optional, cosmetic, carried) Migrate deprecated web style props to boxShadow / style.pointerEvents to silence console warnings.",
+    "(Info only) Web cannot exercise the LocationBatcher because expo-location does not surface GPS in the web preview — batcher never enqueues, so location-sync-indicator, per-booking mechanic-location flushes, and dead-zone retry behavior can only be verified on native / Expo Go. Backend endpoints they call are confirmed 200 via pytest."
+  ],
+  "critical_code_review_comments": [
+    "location-batcher.ts: 25m distance + 60s time thresholds, 10s flush interval, correct haversine, samples stay queued and retried on failure (catch keeps this.profile/this.bookings.get), samples are cleared only after successful POST — matches spec exactly.",
+    "location-batcher.ts: multiple queued profile samples collapse to the latest via 'this.profile = { lat, lng, at }' overwrite; per-booking uses Map.set with same overwrite semantics — no stale coordinate flooding after a dead zone.",
+    "server.py:243 price_for base map contains 'bike_service_home': 799 and this is what create_booking stores in booking.price (line 390). Verified in-band via pytest create+GET.",
+    "api.ts:145 BREAKDOWN_CATEGORIES has bike_service_home as index 0 with icon 'motorbike' and label 'Bike Service at Home' — matches DOM order verified in Playwright (breakdown-bike_service_home first testID).",
+    "home.tsx:132-137 gates location-sync-indicator behind (batcher.profilePending || batcher.bookingsPending > 0) — invisible by default on web (verified), visible on native when batcher has items.",
+    "theme.ts surface=#FFFFFF, brand=#FF6A00, text=#0A0A0A — light theme applied.",
+    "SOS is now a Pressable with testID='sos-button' routing to /(customer)/sos on press (home.tsx:141-147) — Change C intent met."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "100% — Change A (endpoints intact, indicator gated), Change B (white theme + orange hero cards, no white-on-white on 13 screens), Change C (SOS compact pill), Change D (bike_service_home first + 799 price) all verified"},
+  "seed_data_creation": "Ephemeral TEST_iter6 bookings created and cancelled/completed per test; TEST_ prefix used in description fields for identification.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 6 fully verified. Web preview cannot exercise LocationBatcher because expo-location does not surface GPS on web — the batcher stays empty, so location-sync-indicator (testID) stays hidden. This is the SPEC behavior for web. To test the pill on native, main agent would need to call LocationBatcher.enqueueProfile() or use Expo Go on a real device. Backend endpoints POST /api/auth/location and POST /api/bookings/{id}/mechanic-location are confirmed 200 and unchanged. Category testID pattern: breakdown-{key}. SOS pill measures 74x34 on web viewport 390 — close to spec ~90 but slightly narrower. All theme changes verified via a JS-based white-on-white text scan on every screen — zero hits."
+}

@@ -31,9 +31,9 @@ function buildHtml({ center, markers = [], zoom = 14, interactive = true, route 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
-  html,body,#map { margin:0; padding:0; height:100%; width:100%; background:#121212; }
-  .leaflet-container { background:#121212; }
-  .pin { font-family: -apple-system, sans-serif; font-weight:700; color:#fff; padding:6px 10px; border-radius:14px; box-shadow: 0 2px 8px rgba(0,0,0,0.4); font-size:11px; white-space:nowrap; }
+  html,body,#map { margin:0; padding:0; height:100%; width:100%; background:#FFFFFF; }
+  .leaflet-container { background:#FFFFFF; }
+  .pin { font-family: -apple-system, sans-serif; font-weight:700; color:#fff; padding:6px 10px; border-radius:14px; box-shadow: 0 2px 8px rgba(0,0,0,0.25); font-size:11px; white-space:nowrap; }
 </style>
 </head>
 <body>
@@ -41,16 +41,16 @@ function buildHtml({ center, markers = [], zoom = 14, interactive = true, route 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
   var map = L.map('map', { zoomControl: false, attributionControl: false, dragging: ${interactive}, tap: ${interactive}, scrollWheelZoom: ${interactive}, doubleClickZoom: ${interactive}, touchZoom: ${interactive} }).setView([${center.lat}, ${center.lng}], ${zoom});
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png', { subdomains: 'abcd', maxZoom: 19 }).addTo(map);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', { subdomains: 'abcd', maxZoom: 19 }).addTo(map);
   var markers = ${mks};
   markers.forEach(function(m) {
-    var color = m.color || (m.you ? '#34C759' : '#FF3B30');
+    var color = m.color || (m.you ? '#22C55E' : '#FF6A00');
     var icon = L.divIcon({ className: '', html: '<div class="pin" style="background:'+color+'">'+(m.label||'')+'</div>', iconSize: null, iconAnchor: [20, 12] });
     L.marker([m.lat, m.lng], { icon: icon }).addTo(map);
   });
   var rt = ${rt};
   if (rt.length > 1) {
-    L.polyline(rt.map(function(p){return [p.lat, p.lng];}), { color: '#FF3B30', weight: 4, opacity: 0.8 }).addTo(map);
+    L.polyline(rt.map(function(p){return [p.lat, p.lng];}), { color: '#FF6A00', weight: 4, opacity: 0.85 }).addTo(map);
   }
 </script>
 </body></html>`;
@@ -94,6 +94,6 @@ export default function MapView(props: Props) {
 }
 
 const styles = StyleSheet.create({
-  wrap: { width: "100%", backgroundColor: "#121212", overflow: "hidden" },
-  web: { flex: 1, backgroundColor: "#121212" },
+  wrap: { width: "100%", backgroundColor: "#FFFFFF", overflow: "hidden" },
+  web: { flex: 1, backgroundColor: "#FFFFFF" },
 });

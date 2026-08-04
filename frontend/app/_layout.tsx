@@ -22,10 +22,10 @@ export default function RootLayout() {
   if (!loaded && !error) return null;
 
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: "#121212" }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: "#FFFFFF" }}>
       <SafeAreaProvider>
-        <StatusBar barStyle="light-content" backgroundColor="#121212" />
-        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: "#121212" }, animation: "fade" }} />
+        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: "#FFFFFF" }, animation: "fade" }} />
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
