@@ -51,11 +51,7 @@ Arvik ("Help on the way") is an Uber-like roadside assistance mobile app that co
 ## Integrations
 - **Emergent LLM key** (OpenAI gpt-5.4-mini via `emergentintegrations`) for the AI assistant.
 - **Payments**: **Stripe test-mode** via `emergentintegrations.payments.stripe.checkout` — customer taps PAY on a completed booking → Stripe Checkout Session created → hosted checkout on web or `expo-web-browser` on native → success/cancel redirect to `/payment-success` or `/payment-cancel` → status polled and `booking.payment_status = "paid"` marked. Test card: `4242 4242 4242 4242`.
-- **Real GPS**: **`expo-location`** integrated on BOTH customer and mechanic apps.
-  - Customer app: watches position, syncs to `POST /api/auth/location` every 10s.
-  - Mechanic dashboard: also uses `useLiveLocation` so their profile location stays fresh (drives "nearby mechanic" matching for customers).
-  - Mechanic job screen: pushes real coords to `POST /api/bookings/{id}/mechanic-location` every ~6s while a job is active. Backend suppresses the polling-simulation for 30s after each real push, so customer tracking now reflects the mechanic's actual GPS instead of a linear interpolation.
-  - Both apps show a yellow "Location off" banner on web / when permission denied and gracefully fall back.
+- **Real GPS**: **`expo-location`** integrated on BOTH customer and mechanic apps, all samples routed through the **LocationBatcher** singleton (`/app/frontend/src/lib/location-batcher.ts`) — coalesces samples with a 25m/60s threshold, flushes every 10s, keeps failed sends queued for retry on the next tick (survives spotty highway coverage / dead zones without spamming the API on reconnect). Only the latest queued sample is sent — stale points never leak out. A tiny "Syncing…/Offline · will retry" pill (testID `location-sync-indicator`) is shown on customer home while items are pending.
 - **Breakdown photo end-to-end**: customer attaches via `expo-image-picker` (camera or library) → stored on the booking as base64 → mechanic sees a thumbnail row on the job screen with tap-to-enlarge full-screen zoomable modal.
 - **Push notifications**: NOT integrated (out of MVP scope).
 
