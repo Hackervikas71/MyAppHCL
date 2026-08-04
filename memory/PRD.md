@@ -1,7 +1,7 @@
-# Highway Mechanic Connect (HMC) — PRD
+# Arvik — PRD
 
 ## Overview
-An Uber-like roadside assistance mobile app that connects stranded drivers with nearby verified mechanics on national highways. Built with Expo (React Native), FastAPI + MongoDB.
+Arvik ("Help on the way") is an Uber-like roadside assistance mobile app that connects stranded drivers with nearby verified mechanics on national highways. Built with Expo (React Native), FastAPI + MongoDB. Custom orange/black identity with a wrench-and-road-inside-a-droplet logo.
 
 ## Roles
 - **Customer** – request help, live-track mechanic, chat, pay (Cash MVP), rate.

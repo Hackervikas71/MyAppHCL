@@ -1,10 +1,11 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { View, Text, StyleSheet, Pressable, ScrollView, RefreshControl } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { colors, spacing, radius } from "@/src/lib/theme";
 import { useNotifications, NotificationItem } from "@/src/hooks/use-notifications";
+import { loadUser } from "@/src/lib/api";
 
 const ICON: Record<string, any> = {
   new_booking: "wrench",
@@ -17,19 +18,18 @@ export default function NotificationsScreen() {
   const router = useRouter();
   const { items, unread, refresh, markAllRead, markRead } = useNotifications(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [role, setRole] = useState<string | null>(null);
 
+  useEffect(() => { loadUser().then((u) => setRole(u?.role || null)); }, []);
   useFocusEffect(useCallback(() => { refresh(); }, [refresh]));
 
   async function onRefresh() { setRefreshing(true); await refresh(); setRefreshing(false); }
 
   async function open(n: NotificationItem) {
     await markRead(n.id);
-    if (n.booking_id) {
-      // Route depends on role, but /(customer)/booking/[id] works for customers.
-      // Mechanic side uses (mechanic)/job/[id]. We can't tell here easily —
-      // try customer first; deep link resolver in expo-router will fall back if not found.
-      router.push(`/(customer)/booking/${n.booking_id}` as any);
-    }
+    if (!n.booking_id) return;
+    if (role === "mechanic") router.push(`/(mechanic)/job/${n.booking_id}` as any);
+    else router.push(`/(customer)/booking/${n.booking_id}` as any);
   }
 
   return (
