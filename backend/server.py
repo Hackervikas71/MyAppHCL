@@ -398,6 +398,81 @@ async def update_location(loc: LocationUpdate, user: dict = Depends(get_current_
     await db.users.update_one({"id": user["id"]}, {"$set": {"location": {"lat": loc.lat, "lng": loc.lng, "updated_at": now_iso()}}})
     return {"ok": True}
 
+class PictureIn(BaseModel):
+    picture_base64: str
+
+@api.post("/auth/picture", response_model=UserOut)
+async def update_picture(payload: PictureIn, user: dict = Depends(get_current_user)):
+    if not payload.picture_base64.startswith("data:image/"):
+        raise HTTPException(400, "picture_base64 must be a data URL")
+    if len(payload.picture_base64) > 2_500_000:  # ~2.5MB base64 = ~1.8MB image
+        raise HTTPException(400, "Image too large — please pick a smaller photo")
+    await db.users.update_one({"id": user["id"]}, {"$set": {"picture": payload.picture_base64}})
+    updated = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password": 0})
+    return user_to_out(updated)
+
+# ---------------------- Emergency contacts ---------------------- #
+
+class EmergencyContactIn(BaseModel):
+    name: str
+    phone: str
+    relation: Optional[str] = None
+
+@api.get("/profile/contacts")
+async def list_contacts(user: dict = Depends(get_current_user)):
+    doc = await db.users.find_one({"id": user["id"]}, {"_id": 0, "emergency_contacts": 1})
+    return {"contacts": (doc or {}).get("emergency_contacts", []) or []}
+
+@api.post("/profile/contacts")
+async def add_contact(payload: EmergencyContactIn, user: dict = Depends(get_current_user)):
+    name = payload.name.strip()
+    phone = payload.phone.strip()
+    if not name or not phone:
+        raise HTTPException(400, "Name and phone are required")
+    contact = {"id": str(uuid.uuid4()), "name": name, "phone": phone, "relation": (payload.relation or "").strip()}
+    await db.users.update_one({"id": user["id"]}, {"$push": {"emergency_contacts": contact}})
+    return contact
+
+@api.delete("/profile/contacts/{contact_id}")
+async def delete_contact(contact_id: str, user: dict = Depends(get_current_user)):
+    await db.users.update_one({"id": user["id"]}, {"$pull": {"emergency_contacts": {"id": contact_id}}})
+    return {"ok": True}
+
+# ---------------------- Saved vehicles ---------------------- #
+
+class VehicleIn(BaseModel):
+    vehicle_type: str
+    make: str
+    model: str
+    plate: Optional[str] = None
+    year: Optional[int] = None
+
+@api.get("/profile/vehicles")
+async def list_vehicles(user: dict = Depends(get_current_user)):
+    doc = await db.users.find_one({"id": user["id"]}, {"_id": 0, "vehicles": 1})
+    return {"vehicles": (doc or {}).get("vehicles", []) or []}
+
+@api.post("/profile/vehicles")
+async def add_vehicle(payload: VehicleIn, user: dict = Depends(get_current_user)):
+    make = payload.make.strip(); model = payload.model.strip()
+    if not payload.vehicle_type or not make or not model:
+        raise HTTPException(400, "vehicle_type, make, model are required")
+    v = {
+        "id": str(uuid.uuid4()),
+        "vehicle_type": payload.vehicle_type,
+        "make": make,
+        "model": model,
+        "plate": (payload.plate or "").strip().upper(),
+        "year": payload.year,
+    }
+    await db.users.update_one({"id": user["id"]}, {"$push": {"vehicles": v}})
+    return v
+
+@api.delete("/profile/vehicles/{vehicle_id}")
+async def delete_vehicle(vehicle_id: str, user: dict = Depends(get_current_user)):
+    await db.users.update_one({"id": user["id"]}, {"$pull": {"vehicles": {"id": vehicle_id}}})
+    return {"ok": True}
+
 @api.post("/mechanic/toggle-online")
 async def toggle_online(user: dict = Depends(require_role("mechanic"))):
     new_state = not user.get("is_online", False)
@@ -859,7 +934,41 @@ class CheckoutCreateIn(BaseModel):
     booking_id: str
     origin_url: str  # frontend base URL, e.g. https://mechanic-connect-116.preview.emergentagent.com
 
+class WalletTopUpIn(BaseModel):
+    amount: float
+    origin_url: str
+
 _ALLOWED_AMOUNT_RANGE = (10.0, 100000.0)  # INR safety bounds
+_ALLOWED_TOPUP_AMOUNTS = {100.0, 500.0, 1000.0, 2000.0, 5000.0}
+
+@api.post("/wallet/topup")
+async def wallet_topup(payload: WalletTopUpIn, user: dict = Depends(require_role("customer"))):
+    if payload.amount not in _ALLOWED_TOPUP_AMOUNTS:
+        raise HTTPException(400, "Invalid amount. Choose one of the preset options.")
+    origin = payload.origin_url.rstrip("/")
+    success_url = f"{origin}/payment-success?session_id={{CHECKOUT_SESSION_ID}}"
+    cancel_url = f"{origin}/payment-cancel"
+
+    checkout = StripeCheckout(api_key=STRIPE_API_KEY)
+    req = CheckoutSessionRequest(
+        amount=payload.amount,
+        currency="inr",
+        success_url=success_url,
+        cancel_url=cancel_url,
+        metadata={"kind": "wallet_topup", "user_id": user["id"]},
+    )
+    session = await checkout.create_checkout_session(req)
+    await db.payments.insert_one({
+        "id": str(uuid.uuid4()),
+        "kind": "wallet_topup",
+        "user_id": user["id"],
+        "session_id": session.session_id,
+        "amount": payload.amount,
+        "currency": "inr",
+        "status": "initiated",
+        "created_at": now_iso(),
+    })
+    return {"url": session.url, "session_id": session.session_id}
 
 @api.post("/payments/checkout/session")
 async def create_checkout(payload: CheckoutCreateIn, user: dict = Depends(require_role("customer"))):
@@ -882,11 +991,12 @@ async def create_checkout(payload: CheckoutCreateIn, user: dict = Depends(requir
         currency="inr",
         success_url=success_url,
         cancel_url=cancel_url,
-        metadata={"booking_id": payload.booking_id, "customer_id": user["id"]},
+        metadata={"kind": "booking", "booking_id": payload.booking_id, "customer_id": user["id"]},
     )
     session = await checkout.create_checkout_session(req)
     await db.payments.insert_one({
         "id": str(uuid.uuid4()),
+        "kind": "booking",
         "booking_id": payload.booking_id,
         "customer_id": user["id"],
         "session_id": session.session_id,
@@ -902,20 +1012,24 @@ async def checkout_status(session_id: str, user: dict = Depends(get_current_user
     payment = await db.payments.find_one({"session_id": session_id}, {"_id": 0})
     if not payment:
         raise HTTPException(404, "Session not found")
-    # If we've already marked paid, return immediately (idempotent)
     checkout = StripeCheckout(api_key=STRIPE_API_KEY)
     status = await checkout.get_checkout_status(session_id)
-    new_status = "paid" if status.payment_status == "paid" else status.status
     if payment.get("status") != "paid" and status.payment_status == "paid":
+        # Idempotently apply the side-effect based on payment kind
+        kind = payment.get("kind", "booking")
+        if kind == "booking":
+            await db.bookings.update_one({"id": payment["booking_id"]}, {"$set": {"payment_status": "paid"}})
+        elif kind == "wallet_topup":
+            await db.users.update_one({"id": payment["user_id"]}, {"$inc": {"wallet_balance": payment["amount"]}})
         await db.payments.update_one({"session_id": session_id}, {"$set": {"status": "paid", "paid_at": now_iso()}})
-        await db.bookings.update_one({"id": payment["booking_id"]}, {"$set": {"payment_status": "paid"}})
     return {
         "session_id": session_id,
         "payment_status": status.payment_status,
-        "status": new_status,
+        "status": "paid" if status.payment_status == "paid" else status.status,
         "amount_total": status.amount_total,
         "currency": status.currency,
-        "booking_id": payment["booking_id"],
+        "kind": payment.get("kind", "booking"),
+        "booking_id": payment.get("booking_id"),
     }
 
 # ============================================================================

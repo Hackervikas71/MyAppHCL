@@ -1,0 +1,41 @@
+{
+  "summary": "Iteration 8 (Wallet top-up + Profile picture + 4 new settings screens + Profile menu clickability fix) — ALL PASS. Backend: 14/14 tests green in /app/backend/tests/test_iter8_wallet_profile_settings.py. Wallet top-up: POST /api/wallet/topup {amount:500} returns 200 with url starting https://checkout.stripe.com and session_id; payments collection row has kind='wallet_topup', user_id, amount=500, status='initiated'. Invalid preset (750) → 400. Unauthenticated → 403 (require_role dependency raises 403 for missing bearer, functional equivalent of 401 - request spec accepts either). Mechanic role → 403. Profile picture: valid data:image/png data URL → 200 with UserOut.picture matching + email preserved; 'notadataurl' → 400; 2.5MB+ payload → 400. Emergency contacts: POST returns {id, name, phone, relation}, GET includes it, DELETE removes it, missing name → 400. Vehicles: POST accepts vehicle_type+make+model+plate (uppercased server-side), GET includes, DELETE removes, missing make → 400. Booking payment regression: full flow (create booking flat_tyre ₹350 → POST /payments/checkout/session → 200 Stripe url; GET /payments/checkout/status/{sid} returns kind='booking' + booking_id) — passes. Frontend (Playwright, 390x844): (1) Login → Profile tab → all 5 menu items visible & clickable — menu-emergency→emergency-contacts-screen, menu-vehicles→vehicles-screen, menu-notifications→notifications-screen (existing route), menu-support→support-screen, menu-privacy→privacy-screen. Original bug (menu items not clickable) is FIXED. (2) Emergency Contacts: filled name='TEST_UI_Wife', phone='9876500011', relation='Spouse', tapped add-contact-button → new row testID contact-{uuid} appears; delete-contact-{uuid} removes it (verified via re-scan of DOM). (3) Saved Vehicles: tapped vt-bike chip + filled make/model/plate MH01AB1234, tapped add-vehicle-button → vehicle-{uuid} row appears; delete-vehicle-{uuid} removes it. (4) Wallet: add-money-button opens modal; all preset amounts topup-amount-{100,500,1000,2000,5000} render; tapping topup-amount-500 redirected the browser to real https://checkout.stripe.com URL displaying ₹500.00 payment page — verified visually via screenshot after dispatch_event('click'). (5) Profile picture: edit-avatar-button visible & tappable without crashing; permission dialog gracefully handled; profile screen remains stable after tap (image picker is a native OS interaction which Playwright cannot exercise, per spec). (6) Regressions: customer login/home tab/wallet tab/bookings tab all reachable. Deprecation warnings 'shadow*'/'props.pointerEvents' persist (cosmetic, carried from iter 3-7).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "all", "issues": ["Carried-over non-blocking web deprecation warnings: 'shadow*' style props → boxShadow; 'props.pointerEvents' → style.pointerEvents. Unchanged from iter 3-7."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter8_wallet_profile_settings.py",
+    "/app/test_reports/pytest/iter8_results.xml"
+  ],
+  "action_items": [
+    "(Info only) Real Stripe payment completion was NOT exercised (would require entering real test card 4242... via Playwright on Stripe's hosted page — out of scope per spec). The redirect to https://checkout.stripe.com/... with the correct ₹500.00 amount + session_id is verified visually + via network. The status endpoint idempotent credit path (users.wallet_balance += amount on payment_status='paid') is covered by the code review — not exercised end-to-end as no real payment is completed.",
+    "(Info only) Native image picker interaction (expo-image-picker → base64 payload → POST /api/auth/picture) is NOT exercised end-to-end from Playwright (per spec). Backend contract for the upload path (data:image/... prefix + 2.5MB cap + persistence + return of UserOut with picture) is covered by 3 dedicated tests.",
+    "(Optional, cosmetic, carried from iter 3-7) Migrate deprecated web style props to boxShadow / style.pointerEvents to silence console warnings."
+  ],
+  "critical_code_review_comments": [
+    "server.py:944-971 wallet_topup validates against _ALLOWED_TOPUP_AMOUNTS={100,500,1000,2000,5000} strictly, returns 400 for anything else — verified 750 → 400. Uses require_role('customer') so mechanics/admins → 403; missing auth → 403 (dependency raises).",
+    "server.py:1010-1033 checkout_status is idempotent: only mutates DB if payment.status != 'paid' AND Stripe reports paid; dispatches on payment.kind (booking → mark booking paid; wallet_topup → $inc users.wallet_balance). Returns kind in response for frontend routing — verified kind='booking' for booking regression test.",
+    "server.py:404-412 update_picture guards data:image/ prefix + 2,500,000 char cap (~1.8MB image) — both edge cases return 400. Uses find_one after $set to return fresh UserOut with picture.",
+    "server.py:426-434 add_contact strips name+phone and rejects empty strings with 400. UUID id assigned server-side. $push onto users.emergency_contacts — atomic array append. delete_contact uses $pull by id — atomic array removal. Same pattern for vehicles (455-473) with plate uppercased.",
+    "wallet.tsx:32-45 topUp() uses window.location.origin as origin_url (falls back to EXPO_PUBLIC_BACKEND_URL) so success_url/cancel_url land back on the app. Web path uses window.location.href = url (verified redirect works); native path uses expo-web-browser + delayed reload.",
+    "profile.tsx:22-43 pickPicture() requests media perms first, uses base64:true + quality 0.5, wraps as data:image/jpeg;base64,... prefix (matches server prefix check). setUser(updated) refreshes UI immediately without page reload.",
+    "profile.tsx:50-56 all 5 menu items now have onPress wired to router.push('/settings/...'); previous bug where these were static Views is fixed.",
+    "settings/emergency-contacts.tsx and vehicles.tsx correctly use SafeAreaView with testID + back button testID (emergency-back-button / vehicles-back-button). Delete buttons use interpolated testIDs (delete-contact-{id}, delete-vehicle-{id}) — verified in DOM.",
+    "settings/support.tsx uses Linking.openURL for tel:/mailto:/https://wa.me/ — plain expo Linking API, safe on web + native. FAQ list has faq-{i} testIDs.",
+    "payment-success.tsx uses kind from status response to show either 'Your wallet has been credited' + go-wallet-button OR the booking success message — kind-aware messaging is wired (not exercised end-to-end because we don't complete a payment)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter8_wallet_profile_settings.py (NEW test file, 14 tests)"
+  ],
+  "success_rate": {"backend": "100% (14/14)", "frontend": "100% — bug fix verified (5/5 menu items route to correct screens), all new features (contacts CRUD, vehicles CRUD, wallet top-up redirect to Stripe, avatar upload button) exercised via Playwright"},
+  "seed_data_creation": "Ephemeral TEST_ prefixed data added and cleaned up in same test class (emergency contact, vehicle). One TEST_iter8 booking created in Stripe regression test — not cleaned (matches previous iter pattern; booking status='created' with no downstream impact).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iter 8 clean pass. Key contract points for future iterations: (1) Wallet top-up only accepts amounts in {100,500,1000,2000,5000} — do NOT try 250 or 750. (2) Profile picture must start with 'data:image/' and be ≤2,500,000 characters. (3) Emergency contacts + vehicles are stored as arrays on users.emergency_contacts / users.vehicles (not separate collections). (4) checkout_status returns kind='booking' or 'wallet_topup' — frontend payment-success screen dispatches on this. (5) The route /notifications is a top-level Expo Router screen (not under /settings/) — menu-notifications on Profile pushes to /notifications directly. (6) Login response key is access_token (not token); some prior tests assumed 'token'. (7) Bookings POST body is flat: category, breakdown_category, vehicle_type, description, lat, lng, address, urgency — NOT nested under a 'location' key."
+}

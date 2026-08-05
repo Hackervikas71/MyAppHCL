@@ -54,7 +54,7 @@ export default function PaymentSuccess() {
               <MaterialCommunityIcons name="check-decagram" size={64} color={colors.success} />
             </View>
             <Text style={[styles.title, { color: colors.success }]}>Payment Successful</Text>
-            <Text style={styles.sub}>Thanks for using HMC. An invoice has been generated.</Text>
+            <Text style={styles.sub}>{kind === "wallet_topup" ? "Your wallet has been credited." : "Thanks for using Arvik. An invoice has been generated."}</Text>
           </>
         )}
         {(status === "failed" || status === "expired") && (
@@ -68,7 +68,15 @@ export default function PaymentSuccess() {
         )}
 
         <View style={{ flexDirection: "row", gap: spacing.sm, marginTop: spacing.xl }}>
-          {bookingId && (
+          {kind === "wallet_topup" ? (
+            <Pressable
+              testID="go-wallet-button"
+              onPress={() => router.replace("/(customer)/wallet")}
+              style={[styles.btn, { backgroundColor: colors.brand }]}
+            >
+              <Text style={styles.btnText}>VIEW WALLET</Text>
+            </Pressable>
+          ) : bookingId ? (
             <Pressable
               testID="go-booking-button"
               onPress={() => router.replace(`/(customer)/booking/${bookingId}`)}
@@ -76,7 +84,7 @@ export default function PaymentSuccess() {
             >
               <Text style={styles.btnText}>VIEW BOOKING</Text>
             </Pressable>
-          )}
+          ) : null}
           <Pressable
             testID="go-home-button"
             onPress={() => router.replace("/(customer)/home")}

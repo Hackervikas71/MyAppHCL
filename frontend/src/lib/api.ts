@@ -143,8 +143,22 @@ export const api = {
 
   createCheckout: (booking_id: string, origin_url: string) =>
     req<{ url: string; session_id: string }>(`/payments/checkout/session`, { method: "POST", body: JSON.stringify({ booking_id, origin_url }) }),
+  walletTopUp: (amount: number, origin_url: string) =>
+    req<{ url: string; session_id: string }>(`/wallet/topup`, { method: "POST", body: JSON.stringify({ amount, origin_url }) }),
   checkoutStatus: (session_id: string) =>
-    req<{ payment_status: string; status: string; amount_total: number; currency: string; booking_id: string }>(`/payments/checkout/status/${session_id}`),
+    req<{ payment_status: string; status: string; amount_total: number; currency: string; booking_id?: string | null; kind?: string }>(`/payments/checkout/status/${session_id}`),
+
+  updatePicture: (picture_base64: string) => req<User>(`/auth/picture`, { method: "POST", body: JSON.stringify({ picture_base64 }) }),
+
+  listContacts: () => req<{ contacts: any[] }>(`/profile/contacts`),
+  addContact: (body: { name: string; phone: string; relation?: string }) =>
+    req<any>(`/profile/contacts`, { method: "POST", body: JSON.stringify(body) }),
+  deleteContact: (id: string) => req(`/profile/contacts/${id}`, { method: "DELETE" }),
+
+  listVehicles: () => req<{ vehicles: any[] }>(`/profile/vehicles`),
+  addVehicle: (body: { vehicle_type: string; make: string; model: string; plate?: string; year?: number }) =>
+    req<any>(`/profile/vehicles`, { method: "POST", body: JSON.stringify(body) }),
+  deleteVehicle: (id: string) => req(`/profile/vehicles/${id}`, { method: "DELETE" }),
 
   adminStats: () => req<any>(`/admin/stats`),
   adminMechanics: () => req<User[]>(`/admin/mechanics`),
