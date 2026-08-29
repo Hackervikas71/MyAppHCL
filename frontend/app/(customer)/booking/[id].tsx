@@ -5,7 +5,7 @@ import * as WebBrowser from "expo-web-browser";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { colors, spacing, radius } from "@/src/lib/theme";
-import { api, Booking, categoryLabel } from "@/src/lib/api";
+import { api, Booking, categoryLabel, loadUser, User } from "@/src/lib/api";
 import MapView from "@/src/components/MapView";
 
 export default function Tracking() {
@@ -17,6 +17,8 @@ export default function Tracking() {
   const [rating, setRating] = useState(5);
   const [review, setReview] = useState("");
   const [paying, setPaying] = useState(false);
+  const [walletPaying, setWalletPaying] = useState(false);
+  const [balance, setBalance] = useState<number | null>(null);
   const timer = useRef<any>(null);
 
   const load = useCallback(async () => {
@@ -24,6 +26,14 @@ export default function Tracking() {
       const b = await api.getBooking(String(id));
       setBooking(b);
       setLoading(false);
+      // Refresh balance whenever we poll — cheap and keeps the button label live.
+      try {
+        const me = await api.me();
+        setBalance(me.wallet_balance);
+      } catch {
+        const u = (await loadUser()) as User | null;
+        setBalance(u?.wallet_balance ?? null);
+      }
     } catch {}
   }, [id]);
 
@@ -69,6 +79,19 @@ export default function Tracking() {
     } catch (e: any) {
       Alert.alert("Payment error", e?.message || "Could not start checkout");
     } finally { setPaying(false); }
+  }
+
+  async function payFromWallet() {
+    if (!booking) return;
+    setWalletPaying(true);
+    try {
+      const updated = await api.payFromWallet(booking.id);
+      setBooking(updated);
+      // Refresh balance
+      try { const me = await api.me(); setBalance(me.wallet_balance); } catch {}
+    } catch (e: any) {
+      Alert.alert("Wallet payment failed", e?.message || "Could not deduct from wallet");
+    } finally { setWalletPaying(false); }
   }
 
   if (loading || !booking) {
@@ -184,14 +207,31 @@ export default function Tracking() {
                     <Text style={styles.paidText}>PAID</Text>
                   </View>
                 ) : (
-                  <Pressable testID="pay-now-button" onPress={payNow} disabled={paying} style={styles.payBtn}>
-                    {paying ? <ActivityIndicator color="#fff" /> : (
-                      <>
-                        <MaterialCommunityIcons name="credit-card-outline" size={18} color="#fff" />
-                        <Text style={styles.payText}>PAY ₹{booking.price} · UPI / CARD</Text>
-                      </>
-                    )}
-                  </Pressable>
+                  <View style={{ width: "100%", gap: spacing.sm }}>
+                    {balance !== null && balance >= booking.price ? (
+                      <Pressable testID="pay-from-wallet-button" onPress={payFromWallet} disabled={walletPaying || paying} style={[styles.payBtn, { backgroundColor: colors.success }]}>
+                        {walletPaying ? <ActivityIndicator color="#fff" /> : (
+                          <>
+                            <MaterialCommunityIcons name="wallet" size={18} color="#fff" />
+                            <Text style={styles.payText}>PAY ₹{booking.price} FROM WALLET · ₹{balance.toFixed(0)}</Text>
+                          </>
+                        )}
+                      </Pressable>
+                    ) : balance !== null ? (
+                      <View style={styles.walletLow} testID="wallet-insufficient-hint">
+                        <MaterialCommunityIcons name="wallet-outline" size={14} color={colors.textMuted} />
+                        <Text style={styles.walletLowText}>Wallet: ₹{balance.toFixed(0)} · top up in Wallet tab to use it</Text>
+                      </View>
+                    ) : null}
+                    <Pressable testID="pay-now-button" onPress={payNow} disabled={paying || walletPaying} style={styles.payBtn}>
+                      {paying ? <ActivityIndicator color="#fff" /> : (
+                        <>
+                          <MaterialCommunityIcons name="credit-card-outline" size={18} color="#fff" />
+                          <Text style={styles.payText}>PAY ₹{booking.price} · UPI / CARD</Text>
+                        </>
+                      )}
+                    </Pressable>
+                  </View>
                 )}
               </View>
             )}
@@ -263,8 +303,10 @@ const styles = StyleSheet.create({
   completeBox: { alignItems: "center", padding: spacing.lg, gap: 4 },
   completeText: { color: colors.success, fontWeight: "800", fontSize: 15 },
   completeSub: { color: colors.textMuted, fontSize: 13 },
-  payBtn: { flexDirection: "row", gap: spacing.sm, backgroundColor: colors.brand, paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderRadius: radius.pill, alignItems: "center", marginTop: spacing.md },
-  payText: { color: "#fff", fontWeight: "900", fontSize: 13, letterSpacing: 1 },
+  payBtn: { flexDirection: "row", gap: spacing.sm, backgroundColor: colors.brand, paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", marginTop: spacing.md },
+  payText: { color: "#fff", fontWeight: "900", fontSize: 12, letterSpacing: 1 },
+  walletLow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.xs, marginTop: spacing.sm },
+  walletLowText: { color: colors.textMuted, fontSize: 11 },
   paidBadge: { flexDirection: "row", alignItems: "center", gap: spacing.xs, backgroundColor: "rgba(52,199,89,0.15)", paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, marginTop: spacing.md, borderWidth: 1, borderColor: colors.success },
   paidText: { color: colors.success, fontWeight: "900", letterSpacing: 1 },
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "center", padding: spacing.lg },

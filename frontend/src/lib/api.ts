@@ -64,6 +64,16 @@ export type Mechanic = {
   eta_minutes: number;
 };
 
+export type WalletTxn = {
+  id: string;
+  kind: "topup" | "booking_stripe" | "booking_wallet";
+  direction: "credit" | "debit";
+  amount: number;
+  label: string;
+  sub: string;
+  at: string;
+};
+
 async function getToken(): Promise<string | null> {
   return Storage.getItem(TOKEN_KEY);
 }
@@ -120,6 +130,7 @@ export const api = {
   listBookings: () => req<Booking[]>(`/bookings`),
   getBooking: (id: string) => req<Booking>(`/bookings/${id}`),
   acceptBooking: (id: string) => req<Booking>(`/bookings/${id}/accept`, { method: "POST" }),
+  rejectBooking: (id: string) => req<{ ok: boolean }>(`/bookings/${id}/reject`, { method: "POST" }),
   startBooking: (id: string) => req<Booking>(`/bookings/${id}/start`, { method: "POST" }),
   completeBooking: (id: string, otp: string) => req<Booking>(`/bookings/${id}/complete`, { method: "POST", body: JSON.stringify({ otp }) }),
   cancelBooking: (id: string) => req<Booking>(`/bookings/${id}/cancel`, { method: "POST" }),
@@ -145,6 +156,8 @@ export const api = {
     req<{ url: string; session_id: string }>(`/payments/checkout/session`, { method: "POST", body: JSON.stringify({ booking_id, origin_url }) }),
   walletTopUp: (amount: number, origin_url: string) =>
     req<{ url: string; session_id: string }>(`/wallet/topup`, { method: "POST", body: JSON.stringify({ amount, origin_url }) }),
+  walletTransactions: () => req<{ transactions: WalletTxn[] }>(`/wallet/transactions`),
+  payFromWallet: (booking_id: string) => req<Booking>(`/bookings/${booking_id}/pay-wallet`, { method: "POST" }),
   checkoutStatus: (session_id: string) =>
     req<{ payment_status: string; status: string; amount_total: number; currency: string; booking_id?: string | null; kind?: string }>(`/payments/checkout/status/${session_id}`),
 

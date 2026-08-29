@@ -586,7 +586,10 @@ async def list_bookings(user: dict = Depends(get_current_user)):
     if user["role"] == "customer":
         q = {"customer_id": user["id"]}
     elif user["role"] == "mechanic":
-        q = {"$or": [{"mechanic_id": user["id"]}, {"status": "requested"}]}
+        q = {"$or": [
+            {"mechanic_id": user["id"]},
+            {"status": "requested", "rejected_by": {"$ne": user["id"]}},
+        ]}
     else:
         q = {}
     cursor = db.bookings.find(q, {"_id": 0}).sort("created_at", -1)
@@ -681,6 +684,18 @@ async def accept_booking(booking_id: str, user: dict = Depends(require_role("mec
         booking_id,
     )
     return booking_to_out(b)
+
+@api.post("/bookings/{booking_id}/reject")
+async def reject_booking(booking_id: str, user: dict = Depends(require_role("mechanic"))):
+    """Mechanic declines a job. The booking stays 'requested' so others can still accept,
+    but this mechanic won't see it again in their pending feed."""
+    b = await db.bookings.find_one({"id": booking_id})
+    if not b:
+        raise HTTPException(404, "Booking not found")
+    if b["status"] != "requested":
+        raise HTTPException(400, "Booking already handled")
+    await db.bookings.update_one({"id": booking_id}, {"$addToSet": {"rejected_by": user["id"]}})
+    return {"ok": True, "booking_id": booking_id}
 
 @api.post("/bookings/{booking_id}/start", response_model=BookingOut)
 async def start_work(booking_id: str, user: dict = Depends(require_role("mechanic"))):
@@ -831,6 +846,79 @@ async def ai_chat_sync(payload: AIChatIn, user: dict = Depends(get_current_user)
     except Exception as e:
         raise HTTPException(500, f"AI error: {e}")
     return {"reply": text, "session_id": session_id}
+
+@api.get("/wallet/transactions")
+async def wallet_transactions(user: dict = Depends(get_current_user)):
+    """Unified feed: Stripe top-ups (credit) + wallet booking spends (debit) + completed booking spends via Stripe (debit)."""
+    txns: List[dict] = []
+    async for p in db.payments.find({"user_id": user["id"], "kind": "wallet_topup", "status": "paid"}, {"_id": 0}):
+        txns.append({
+            "id": p["id"],
+            "kind": "topup",
+            "direction": "credit",
+            "amount": p["amount"],
+            "label": "Wallet top-up",
+            "sub": "Card / UPI",
+            "at": p.get("paid_at") or p.get("created_at"),
+        })
+    async for p in db.payments.find({"customer_id": user["id"], "kind": "booking", "status": "paid"}, {"_id": 0}):
+        booking = await db.bookings.find_one({"id": p.get("booking_id")}, {"_id": 0, "breakdown_category": 1, "mechanic_name": 1})
+        txns.append({
+            "id": p["id"],
+            "kind": "booking_stripe",
+            "direction": "debit",
+            "amount": p["amount"],
+            "label": (booking or {}).get("breakdown_category", "Service").replace("_", " ").title(),
+            "sub": f"Card / UPI · {(booking or {}).get('mechanic_name') or '—'}",
+            "at": p.get("paid_at") or p.get("created_at"),
+        })
+    async for p in db.payments.find({"customer_id": user["id"], "kind": "wallet_spend", "status": "paid"}, {"_id": 0}):
+        booking = await db.bookings.find_one({"id": p.get("booking_id")}, {"_id": 0, "breakdown_category": 1, "mechanic_name": 1})
+        txns.append({
+            "id": p["id"],
+            "kind": "booking_wallet",
+            "direction": "debit",
+            "amount": p["amount"],
+            "label": (booking or {}).get("breakdown_category", "Service").replace("_", " ").title(),
+            "sub": f"Wallet · {(booking or {}).get('mechanic_name') or '—'}",
+            "at": p.get("paid_at") or p.get("created_at"),
+        })
+    txns.sort(key=lambda t: t.get("at") or "", reverse=True)
+    return {"transactions": txns}
+
+@api.post("/bookings/{booking_id}/pay-wallet", response_model=BookingOut)
+async def pay_from_wallet(booking_id: str, user: dict = Depends(require_role("customer"))):
+    booking = await db.bookings.find_one({"id": booking_id, "customer_id": user["id"]})
+    if not booking:
+        raise HTTPException(404, "Booking not found")
+    if booking.get("payment_status") == "paid":
+        raise HTTPException(400, "Already paid")
+    if booking.get("status") != "completed":
+        raise HTTPException(400, "Booking must be completed before payment")
+    price = float(booking["price"])
+    # Atomic deduction with balance guard
+    result = await db.users.update_one(
+        {"id": user["id"], "wallet_balance": {"$gte": price}},
+        {"$inc": {"wallet_balance": -price}},
+    )
+    if result.modified_count == 0:
+        me_doc = await db.users.find_one({"id": user["id"]}, {"_id": 0, "wallet_balance": 1})
+        raise HTTPException(400, f"Insufficient wallet balance (₹{(me_doc or {}).get('wallet_balance', 0):.0f} < ₹{price:.0f})")
+    await db.bookings.update_one({"id": booking_id}, {"$set": {"payment_status": "paid"}})
+    await db.payments.insert_one({
+        "id": str(uuid.uuid4()),
+        "kind": "wallet_spend",
+        "booking_id": booking_id,
+        "customer_id": user["id"],
+        "amount": price,
+        "currency": "inr",
+        "status": "paid",
+        "paid_at": now_iso(),
+        "created_at": now_iso(),
+    })
+    booking["payment_status"] = "paid"
+    booking.pop("_id", None)
+    return booking_to_out(booking)
 
 # ============================================================================
 # NOTIFICATIONS (in-app)

@@ -5,13 +5,13 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as WebBrowser from "expo-web-browser";
 import { colors, spacing, radius } from "@/src/lib/theme";
-import { api, User, loadUser, Booking, categoryLabel } from "@/src/lib/api";
+import { api, User, loadUser, WalletTxn } from "@/src/lib/api";
 
 const TOPUP_AMOUNTS = [100, 500, 1000, 2000, 5000];
 
 export default function Wallet() {
   const [user, setUser] = useState<User | null>(null);
-  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [txns, setTxns] = useState<WalletTxn[]>([]);
   const [loading, setLoading] = useState(false);
   const [topUpOpen, setTopUpOpen] = useState(false);
   const [topUpBusy, setTopUpBusy] = useState(false);
@@ -19,10 +19,9 @@ export default function Wallet() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [u, list] = await Promise.all([api.me().catch(() => null), api.listBookings().catch(() => [])]);
-      if (u) setUser(u);
-      else setUser(await loadUser());
-      setBookings(list.filter((b) => b.status === "completed"));
+      const [u, t] = await Promise.all([api.me().catch(() => null), api.walletTransactions().catch(() => ({ transactions: [] as WalletTxn[] }))]);
+      if (u) setUser(u); else setUser(await loadUser());
+      setTxns(t.transactions || []);
     } catch {}
     setLoading(false);
   }, []);
@@ -44,7 +43,8 @@ export default function Wallet() {
     } finally { setTopUpBusy(false); }
   }
 
-  const totalSpent = bookings.reduce((s, b) => s + b.price, 0);
+  const totalSpent = txns.filter((t) => t.direction === "debit").reduce((s, t) => s + t.amount, 0);
+  const totalRides = txns.filter((t) => t.kind !== "topup").length;
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]} testID="customer-wallet">
@@ -70,7 +70,7 @@ export default function Wallet() {
             <View style={styles.miniStat}>
               <MaterialCommunityIcons name="clipboard-check" size={14} color="rgba(255,255,255,0.85)" />
               <Text style={styles.miniStatLabel}>Rides</Text>
-              <Text style={styles.miniStatVal}>{bookings.length}</Text>
+              <Text style={styles.miniStatVal}>{totalRides}</Text>
             </View>
           </View>
         </View>
@@ -91,21 +91,30 @@ export default function Wallet() {
         </View>
 
         <Text style={styles.section}>Recent Transactions</Text>
-        {bookings.length === 0 && (
-          <Text style={{ color: colors.textMuted, textAlign: "center", padding: spacing.xl }}>No transactions yet</Text>
+        {txns.length === 0 && (
+          <Text style={{ color: colors.textMuted, textAlign: "center", padding: spacing.xl }} testID="no-transactions">No transactions yet</Text>
         )}
-        {bookings.slice(0, 20).map((b) => (
-          <View key={b.id} style={styles.txn} testID={`txn-${b.id}`}>
-            <View style={styles.txnIcon}>
-              <MaterialCommunityIcons name="arrow-up-right" size={18} color={colors.brand} />
+        {txns.slice(0, 30).map((t) => {
+          const isCredit = t.direction === "credit";
+          return (
+            <View key={t.id} style={styles.txn} testID={`txn-${t.id}`}>
+              <View style={[styles.txnIcon, { backgroundColor: isCredit ? "rgba(46,204,113,0.15)" : "rgba(255,140,0,0.15)" }]}>
+                <MaterialCommunityIcons
+                  name={isCredit ? "arrow-down-left" : "arrow-up-right"}
+                  size={18}
+                  color={isCredit ? "#2ecc71" : "#ff8c00"}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.txnTitle}>{t.label}</Text>
+                <Text style={styles.txnSub}>{t.at ? new Date(t.at).toLocaleDateString() : ""} · {t.sub}</Text>
+              </View>
+              <Text style={[styles.txnAmt, { color: isCredit ? "#2ecc71" : "#ff8c00" }]} testID={`txn-amt-${t.id}`}>
+                {isCredit ? "+" : "−"}₹{t.amount.toFixed(0)}
+              </Text>
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.txnTitle}>{categoryLabel(b.breakdown_category)}</Text>
-              <Text style={styles.txnSub}>{new Date(b.created_at).toLocaleDateString()} · {b.mechanic_name || "—"}</Text>
-            </View>
-            <Text style={styles.txnAmt}>-₹{b.price}</Text>
-          </View>
-        ))}
+          );
+        })}
       </ScrollView>
 
       <Modal visible={topUpOpen} transparent animationType="slide" onRequestClose={() => setTopUpOpen(false)}>
